@@ -490,7 +490,7 @@ def main():
         log("Error: No valid CVE IDs found to scan for", "error")
         sys.exit(1)
     
-    log(f"Starting scan with the following parameters:", "info")
+    log(f"Starting scan with these parameters:", "info")
     log(f"Targets: {len(ip_list)} IPs ({'from file' if args.ip_file else args.ip})", "info")
     log(f"Vulnerabilities: {len(cves)} CVEs ({'from file' if args.cve_file else 'manual'})", "info")
     log(f"Concurrent workers: {args.workers}", "info")
