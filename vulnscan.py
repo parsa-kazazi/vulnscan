@@ -11,6 +11,8 @@ import time
 import json
 import os
 
+init(autoreset=True)
+
 print(Fore.LIGHTBLUE_EX + r"""
   _____     _     _____
  |  |  |_ _| |___|   __|___ ___ ___
@@ -18,10 +20,6 @@ print(Fore.LIGHTBLUE_EX + r"""
   \___/|___|_|_|_|_____|___|__,|_|_|
 
 """ + Fore.RESET + "   [ Mass Vulnerability Scanner ]\n")
-
-SHODAN_API_URL = "https://internetdb.shodan.io/{ip}"
-CVE_API_URL = "https://cvedb.shodan.io/cve/{cve_id}"
-init(autoreset=True)
 
 class RateLimitException(Exception):
     pass
@@ -35,6 +33,7 @@ class ProxyManager:
         self.proxy_test_interval = 300
         self.proxy_retry_threshold = 3
         self.proxy_fail_counts: Dict[str, int] = {}
+        self.current_proxy_index = 0
         
     async def get_working_proxy(self, session: aiohttp.ClientSession) -> Optional[str]:
         if self.working_proxy and self.working_proxy not in self.rate_limited_proxies:
@@ -43,7 +42,10 @@ class ProxyManager:
             else:
                 self.working_proxy = None
                 
-        for proxy in self.proxies:
+        for _ in range(len(self.proxies)):
+            proxy = self.proxies[self.current_proxy_index % len(self.proxies)]
+            self.current_proxy_index += 1
+            
             if self._is_proxy_bad(proxy):
                 continue
                 
@@ -84,7 +86,7 @@ class ProxyManager:
                             raise Exception(f"Status {response.status}")
                         await response.read()
                 except Exception as e:
-                    log(f"Proxy test failed for {test_url}: {str(e)} - {proxy}", "warning")
+                    log(f"Proxy test failed for {proxy}: {str(e)}", "warning")
                     raise
                     
             log(f"Proxy working: {proxy}", "success")
@@ -247,7 +249,7 @@ async def handle_response(response, ip: str, cves: List[str], proxy_manager: Opt
             return None, False
             
         else:
-            log(f"{ip} : not found in shodan", "warning")
+            log(f"{ip} not found in shodan", "warning")
             return None, False
             
     except ValueError:
@@ -271,7 +273,7 @@ async def scan(ip: str, cves: List[str], session: aiohttp.ClientSession,
                     proxy = await proxy_manager.get_working_proxy(session) if proxy_manager else None
                     log(f"Scanning {ip} with {'proxy ' + proxy if proxy else 'direct connection'}")
                     
-                    async with session.get(SHODAN_API_URL.format(ip=ip), 
+                    async with session.get("https://internetdb.shodan.io/{ip}".format(ip=ip), 
                                         timeout=TIMEOUT, 
                                         proxy=proxy) as response:
                         result, rate_limit = await handle_response(response, ip, cves, proxy_manager)
@@ -314,7 +316,7 @@ async def scan(ip: str, cves: List[str], session: aiohttp.ClientSession,
 
 async def get_cve_info(cve_id: str, session: aiohttp.ClientSession) -> Optional[Dict]:
     try:
-        async with session.get(CVE_API_URL.format(cve_id=cve_id), timeout=TIMEOUT) as response:
+        async with session.get("https://cvedb.shodan.io/cve/{cve_id}".format(cve_id=cve_id), timeout=TIMEOUT) as response:
             if response.status == 200:
                 return await response.json()
             elif response.status == 404:
@@ -334,7 +336,7 @@ def display_cve_info(cve_info: Dict):
     
     print(" - References:")
     references = cve_info.get('references', ['N/A'])
-    for ref in references[:5]:  # Show first 5 refrences
+    for ref in references[:5]:
         print(f"     {ref}")
     if len(references) > 5:
         print(f"     (+ {len(references)-5} more references)")
@@ -353,9 +355,14 @@ async def scan_targets(ip_list: List[str], cves: List[str], output_file: str,
     exit_event = asyncio.Event()
     vulnerable_hosts = []
 
+    json_output = output_file.replace('.txt', '.json') if output_file.endswith('.txt') else output_file + '.json'
+    with open(output_file, 'w') as f:
+        pass
+    with open(json_output, 'w') as f:
+        json.dump([], f)
+
     try:
         async with aiohttp.ClientSession() as session:
-            # Showing CVE information
             for cve in cves:
                 cve_info = await get_cve_info(cve, session)
                 if cve_info:
@@ -370,6 +377,7 @@ async def scan_targets(ip_list: List[str], cves: List[str], output_file: str,
                     result = await task
                     if result:
                         vulnerable_hosts.append(result)
+                        save_immediate_result(result, output_file, json_output)
                 except RateLimitException:
                     log("Stopping scan due to rate limit", "error")
                     break
@@ -381,24 +389,41 @@ async def scan_targets(ip_list: List[str], cves: List[str], output_file: str,
         
     return vulnerable_hosts
 
-def save_results(vulnerable_hosts: List[Dict], output_file: str):
+def save_immediate_result(result: Dict, txt_file: str, json_file: str):
     try:
-        # Json output
+        with open(txt_file, 'a') as f:
+            f.write(f"{result['ip']} - {', '.join(result['vulns'])}\n")
+        
+        with open(json_file, 'r+') as f:
+            try:
+                data = json.load(f)
+            except json.JSONDecodeError:
+                data = []
+            data.append(result)
+            f.seek(0)
+            json.dump(data, f, indent=2)
+            f.truncate()
+            
+        log(f"Saved result for {result['ip']}", "success")
+    except Exception as e:
+        log(f"Failed to save immediate result: {str(e)}", "error")
+
+def save_results(vulnerable_hosts: List[Dict], output_file: str):
+    """Final save of all results (for completeness)"""
+    try:
         json_output = output_file.replace('.txt', '.json') if output_file.endswith('.txt') else output_file + '.json'
         
         with open(json_output, 'w') as f:
             json.dump(vulnerable_hosts, f, indent=2)
-        log(f"Full results saved to {json_output} (JSON format)", "success")
         
-        # TXT output
         with open(output_file, 'w') as f:
             for host in vulnerable_hosts:
                 f.write(f"{host['ip']} - {', '.join(host['vulns'])}\n")
         
         log(f"Found {len(vulnerable_hosts)} vulnerable IPs", "success")
-        log(f"Results saved to {output_file}", "info")
+        log(f"Final results saved to {output_file} and {json_output}", "info")
     except Exception as e:
-        log(f"Failed to save results: {str(e)}", "error")
+        log(f"Failed to save final results: {str(e)}", "error")
 
 def parse_arguments():
     parser = argparse.ArgumentParser(
@@ -433,7 +458,7 @@ def parse_arguments():
         sys.exit(0)
     
     if not args.ip and not args.ip_file:
-        log("Error: You must specify either an IP/range (-i) or a file with IPs (-f)", "error")
+        log("Error: You must specify either an IP/range (-i) or a file with IPs (-I)\n", "error")
         usage(parser)
         sys.exit(1)
         
