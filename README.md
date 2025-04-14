@@ -1,6 +1,4 @@
 # VulnScan
-## Mass Vulnerability Scanner
-
 ![Vulnerability Scanner Logo](https://i.postimg.cc/26w6XXJ7/image-2025-04-14-13-42-14.png)
 
 A powerful tool for scanning IPs and identifying CVE vulnerabilities using Shodan InternetDB
