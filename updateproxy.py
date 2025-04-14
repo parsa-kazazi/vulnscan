@@ -6,45 +6,41 @@ import time
 import sys
 
 def download_proxies():
-    """Download proxies from GitHub sources"""
     urls = [
-        "https://raw.githubusercontent.com/proxifly/free-proxy-list/refs/heads/main/proxies/all/data.txt",
-        "https://raw.githubusercontent.com/monosans/proxy-list/refs/heads/main/proxies/all.txt",
+        "https://raw.githubusercontent.com/proxifly/free-proxy-list/main/proxies/all/data.txt",
+        "https://raw.githubusercontent.com/monosans/proxy-list/main/proxies/all.txt",
         "https://raw.githubusercontent.com/officialputuid/KangProxy/KangProxy/xResults/RAW.txt",
-        "https://raw.githubusercontent.com/dpangestuw/Free-Proxy/refs/heads/main/All_proxies.txt"
+        "https://raw.githubusercontent.com/dpangestuw/Free-Proxy/main/All_proxies.txt"
     ]
     
     proxies = []
     
     for url in urls:
         try:
-            response = requests.get(url, timeout=10)
+            response = requests.get(url, timeout=5)
+            print(f"Downloading: {url}")
             if response.status_code == 200:
                 proxies.extend([line.strip() for line in response.text.splitlines() if line.strip()])
-        except:
-            print(f"⚠️ Failed to download proxies from {url}")
+        except Exception as e:
+            print(f"Failed to download {url} - {str(e)}")
     
-    proxies = list(set(proxies))
+    proxies = list({p for p in proxies if p.startswith(('http://', 'socks4://', 'socks5://'))})
     return proxies
 
 def check_proxy(proxy):
-    """Check if a proxy is working"""
-    proxies = {}
     try:
+        proxies = {}
+        test_url = 'https://api.ipify.org'
+        
         if proxy.startswith('http://'):
             proxies = {"http": proxy, "https": proxy}
-            test_url = 'http://httpbin.org/ip'
-        elif proxy.startswith('socks4://'):
+        elif proxy.startswith(('socks4://', 'socks5://')):
             proxies = {"http": proxy, "https": proxy}
-            test_url = "http://httpbin.org/ip"
-        elif proxy.startswith('socks5://'):
-            proxies = {"http": proxy, "https": proxy}
-            test_url = 'http://httpbin.org/ip'
         else:
             return False
         
         start_time = time.time()
-        response = requests.get(test_url, proxies=proxies, timeout=10)
+        response = requests.get(test_url, proxies=proxies, timeout=3)
         end_time = time.time()
         
         if response.status_code == 200:
@@ -55,37 +51,38 @@ def check_proxy(proxy):
         return False
 
 def process_proxies():
-    """Process the proxies and save working ones"""
-    print("\nUpdating proxies...\n")
+    print("\nUpdating Proxies...\n")
     proxies = download_proxies()
     
     if not proxies:
-        print("❌ No proxies downloaded. Check your internet connection or the source URLs.")
+        print("No proxies downloaded. Check your internet connection.")
         sys.exit(1)
     
-    print(f"Total proxies to check: {len(proxies)}")
-    print("Checking proxies... Please wait\n")
-    
-    working_proxies = []
-    
-    with ThreadPoolExecutor(max_workers=20) as executor:
-        results = executor.map(check_proxy, proxies)
-        
-        for proxy, result in zip(proxies, results):
-            if result:
-                is_working, speed = result
-                if is_working:
-                    working_proxies.append(proxy)
-                    print(f"✅ Working proxy: {proxy} - Speed: {speed:.2f}s")
-            else:
-                print(f"❌ Failed proxy: {proxy}")
+    print(f"\nTotal proxies to check: {len(proxies)}")
+    print("Checking proxies...\n")
     
     output_file = 'proxy.txt'
-    with open(output_file, 'w') as f:
-        f.write('\n'.join(working_proxies))
+    working_count = 0
     
-    print(f"\nTotal working proxies: {len(working_proxies)} out of {len(proxies)}")
-    print(f"Results saved to {output_file}\n")
+    with open(output_file, 'w') as f:
+        f.write("")
+
+    def handle_proxy(proxy):
+        nonlocal working_count
+        result = check_proxy(proxy)
+        if result:
+            is_working, speed = result
+            if is_working:
+                with open(output_file, 'a') as f:
+                    f.write(f"{proxy}\n")
+                print(f"Working: {proxy} - Speed: {speed:.2f}s")
+                working_count += 1
+    
+    with ThreadPoolExecutor(max_workers=300) as executor:
+        executor.map(handle_proxy, proxies)
+    
+    print(f"\nWorking proxies: {working_count}/{len(proxies)}")
+    print(f"Saved to: {output_file}")
 
 if __name__ == "__main__":
     process_proxies()
