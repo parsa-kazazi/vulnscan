@@ -3,7 +3,7 @@
 
 A powerful tool for scanning IPs and identifying CVE vulnerabilities using Shodan InternetDB
 
-## Key Features
+## Features
 
 - Scan single IP or IP range
 - Support for IP lists from file
