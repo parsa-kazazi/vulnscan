@@ -72,7 +72,7 @@ python vulnscan.py -i 10.0.0.1-10.0.0.100 -c CVE-2021-41380 CVE-2022-27502 -o re
 2. Scan IP list from file with proxies:
 
 ```bash
-python vulnscan.py -f targets.txt -cf vulnerabilities.txt -p proxies.txt -w 15
+python vulnscan.py -I targets.txt -C vulnerabilities.txt -p proxies.txt -w 15
 ```
 
 3. Fast scan with short timeout:
