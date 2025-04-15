@@ -31,33 +31,38 @@ python vulnscan.py -i 192.168.1.1 -c CVE-2022-27502
 ### Advanced Scan:
 
 ```bash
-python vulnscan.py -I targets.txt -C cves.txt -p proxies.txt -o results.json -w 20
+python vulnscan.py -if targets.txt -cf cves.txt -p proxies.txt -o results.json -w 20
 ```
 
 ### Available Parameters:
 
 ```
+usage: vulnscan.py [-i IP] [-if IP_FILE] [-c CVE [CVE ...]] [-cf CVE_FILE] [-o OUTPUT] [-p] [-pt PROXY_THREADS] [-t TIMEOUT] [-r RETRIES]
+                   [-w WORKERS] [-v] [-h]
+
 Target Options:
-  -i IP, --ip IP        Single IP or IP range (e.g., 192.168.1.1 or 192.168.1.1-192.168.1.100)
-  -I FILE, --ip-file FILE  File containing list of IPs or IP ranges (one per line)
+  -i, --ip IP           Single IP or IP range (e.g., 192.168.1.1 or 192.168.1.1-192.168.1.100)
+  -if, --ip-file IP_FILE
+                        File containing list of IPs or IP ranges (one per line)
 
 Vulnerability Options:
-  -c CVE [CVE ...], --cve CVE [CVE ...]
+  -c, --cve CVE [CVE ...]
                         One or more CVE IDs (e.g., CVE-2022-27502)
-  -C CVE_FILE, --cve-file CVE_FILE
+  -cf, --cve-file CVE_FILE
                         File containing list of CVE IDs (one per line)
 
 General Options:
-  -o OUTPUT, --output OUTPUT
-                        Output file (default: vulnerable.txt)
-  -p PROXY_FILE, --proxy-file PROXY_FILE
-                        File containing list of proxies
-  -t TIMEOUT, --timeout TIMEOUT
-                        Timeout in seconds for each request (default: 5)
-  -r RETRIES, --retries RETRIES
+  -o, --output OUTPUT   Output file (default: vulnerable.txt)
+  -p, --use-proxy       Use automatic proxy rotation to bypass rate limits
+  -pt, --proxy-threads PROXY_THREADS
+                        Number of threads for proxy checking (default: 100)
+  -t, --timeout TIMEOUT
+                        Timeout in seconds for each request (default: 10)
+  -r, --retries RETRIES
                         Max retries for failed requests (default: 3)
-  -w WORKERS, --workers WORKERS
+  -w, --workers WORKERS
                         Number of concurrent workers (default: 10)
+  -v, --verbose         Enable verbose output with detailed information
   -h, --help            Show this help message and exit
 ```
 
@@ -72,7 +77,7 @@ python vulnscan.py -i 10.0.0.1-10.0.0.100 -c CVE-2021-41380 CVE-2022-27502 -o re
 2. Scan IP list from file with proxies:
 
 ```bash
-python vulnscan.py -I targets.txt -C vulnerabilities.txt -p proxies.txt -w 15
+python vulnscan.py -if targets.txt -C vulnerabilities.txt -p proxies.txt -w 15
 ```
 
 3. Fast scan with short timeout:
