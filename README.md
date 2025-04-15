@@ -31,7 +31,7 @@ python vulnscan.py -i 192.168.1.1 -c CVE-2022-27502
 ### Advanced Scan:
 
 ```bash
-python vulnscan.py -if targets.txt -cf cves.txt -p proxies.txt -o results.json -w 20
+python vulnscan.py -if targets.txt -cf cves.txt -p -o results.json -w 20
 ```
 
 ### Available Parameters:
@@ -77,7 +77,7 @@ python vulnscan.py -i 10.0.0.1-10.0.0.100 -c CVE-2021-41380 CVE-2022-27502 -o re
 2. Scan IP list from file with proxies:
 
 ```bash
-python vulnscan.py -if targets.txt -C vulnerabilities.txt -p proxies.txt -w 15
+python vulnscan.py -if targets.txt -C vulnerabilities.txt -p -w 15
 ```
 
 3. Fast scan with short timeout:
