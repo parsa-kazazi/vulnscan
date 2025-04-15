@@ -39,7 +39,7 @@ python vulnscan.py -I targets.txt -C cves.txt -p proxies.txt -o results.json -w 
 ```
 Target Options:
   -i IP, --ip IP        Single IP or IP range (e.g., 192.168.1.1 or 192.168.1.1-192.168.1.100)
-  -I FILE, --file FILE  File containing list of IPs or IP ranges (one per line)
+  -I FILE, --ip-file FILE  File containing list of IPs or IP ranges (one per line)
 
 Vulnerability Options:
   -c CVE [CVE ...], --cve CVE [CVE ...]
