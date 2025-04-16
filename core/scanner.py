@@ -175,7 +175,7 @@ async def scan_targets(ip_list: list, cves: list, output_file: str,
                 'threads': proxy_threads,
                 'failed_proxies': {}
             }
-            log(f"Using {len(fresh_proxies)} {'working ' if proxy_check else ''}proxies", "success")
+            log(f"Using {len(fresh_proxies)} {'working ' if proxy_check else ''}proxies\n", "success")
         else:
             log("No proxies available, aborting scan", "error")
             return []
