@@ -166,7 +166,8 @@ def main():
                 max_retries=args.retries,
                 concurrency=args.workers,
                 proxy_threads=args.proxy_threads,
-                proxy_check=args.proxy_check
+                proxy_check=args.proxy_check,
+                verbose_output=args.verbose
             )
         )
         
