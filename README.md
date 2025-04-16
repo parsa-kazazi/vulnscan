@@ -25,7 +25,7 @@ pip install -r requirements.txt
 ### Available Parameters:
 
 ```
-usage: vulnscan.py [-i IP] [-if IP_FILE] [-c CVE [CVE ...]] [-cf CVE_FILE] [-p] [-pf PROXY_FILE] [-pt PROXY_THREADS] [-o OUTPUT] [-t TIMEOUT] [-r RETRIES] [-w WORKERS] [-v] [-h]
+usage: vulnscan.py [-i IP] [-if IP_FILE] [-c CVE [CVE ...]] [-cf CVE_FILE] [-p] [-pf PROXY_FILE] [-pt PROXY_THREADS] [-pc] [-o OUTPUT] [-t TIMEOUT] [-r RETRIES] [-w WORKERS] [-v] [-h]
 
 Target Options:
   -i, --ip IP           Single IP or IP range (e.g., 192.168.1.1 or 192.168.1.1-192.168.1.100)
@@ -45,6 +45,7 @@ Proxy Options:
                         Formats: http[s]://[user:pass@]host:port or socks[4|5]://[user:pass@]host:port
   -pt, --proxy-threads PROXY_THREADS
                         Number of threads for proxy checking (default: 100)
+  -pc, --proxy-check    Check and filter working proxies before use (for both online and file proxies)
 
 General Options:
   -o, --output OUTPUT   Output file (default: vulnerable.txt)
@@ -64,25 +65,29 @@ General Options:
 ```
 python vulnscan.py -i 192.168.1.1 -c CVE-2022-27502 CVE-2021-41380
 ```
-3. Scan IP range from file:
+2. Scan IP range from file:
 ```
 python vulnscan.py -if ips.txt -c CVE-2022-27502 -o results.txt
 ```
-5. Scan with CVEs from file:
+3. Scan with CVEs from file:
 ```
 python vulnscan.py -i 10.0.0.1-10.0.0.100 -cf cves.txt
 ```
-7. Scan with automatic proxies:
+4. Scan with automatic proxies:
 ```
 python vulnscan.py -i 192.168.1.1 -c CVE-2022-1234 -p
 ```
-9. Scan with custom proxy file:
+5. Scan with custom proxy file:
 ```
 python vulnscan.py -if targets.txt -cf vulnerabilities.txt -pf proxies.txt
 ```
-11. Advanced scan with all options:
+6. Scan with proxy checking:
 ```
-python vulnscan.py -if targets.txt -cf cves.txt -pf proxies.txt -o output.json -t 20 -r 5 -w 50 -pt 200 -v
+python vulnscan.py -i 10.0.0.1-10.0.0.100 -c CVE-2022-1234 -p -pc
+```
+7. Advanced scan with all options:
+```
+python vulnscan.py -if targets.txt -cf cves.txt -pf proxies.txt -o output.json -t 20 -r 5 -w 50 -pt 200 -pc -v
 ```
 
 ## File Formats
