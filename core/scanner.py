@@ -4,7 +4,12 @@ import random
 import aiohttp
 import asyncio
 from .proxy import load_proxies, download_proxies
-from .utils import log, save_immediate_result
+from .utils import (
+    log,
+    save_immediate_result,
+    get_cve_info,
+    display_cve_info
+)
 
 async def handle_response(response, ip: str, cves: list, proxy_manager: dict) -> tuple:
     try:
@@ -124,49 +129,29 @@ async def scan(ip: str, cves: list, session: aiohttp.ClientSession,
                     await asyncio.sleep(random.uniform(0.5, 1.5))
                     continue
 
-            log(f"Max retries reached for {ip}", "warning")
+            log(f"Max retries reached for {ip}", "warning", verbose=True)
             return None
             
     except asyncio.CancelledError:
         return None
 
-async def get_cve_info(cve_id: str, session: aiohttp.ClientSession) -> dict:
-    try:
-        async with session.get(f"https://cvedb.shodan.io/cve/{cve_id}", timeout=TIMEOUT) as response:
-            if response.status == 200:
-                return await response.json()
-            elif response.status == 404:
-                log(f"No information available for {cve_id}", "warning")
-            else:
-                log(f"Failed to get CVE info (Status: {response.status})", "warning")
-    except Exception as e:
-        log(f"Error fetching CVE info: {str(e)}", "error")
-    return None
-
-def display_cve_info(cve_info: dict):
-    log(f"CVE Information for {cve_info.get('cve_id', 'N/A')}:", "info")
-    print(f" - Summary: {cve_info.get('summary', 'N/A')}")
-    print(f" - CVSS Score: {cve_info.get('cvss_v3', cve_info.get('cvss', 'N/A'))}")
-    print(f" - Published: {cve_info.get('published_time', 'N/A')}")
-    print(f" - Known Exploited: {'Yes' if cve_info.get('kev', False) else 'No'}")
-    print(" - References:")
-    references = cve_info.get('references', ['N/A'])
-    for ref in references[:5]:
-        print(f"     {ref}")
-    if len(references) > 5:
-        print(f"     (+ {len(references)-5} more references)")
-    print()
-
 async def scan_targets(ip_list: list, cves: list, output_file: str, 
                       timeout: int, max_retries: int, 
                       concurrency: int, proxy_threads: int = 100,
                       use_proxy: bool = False, proxy_file: str = None,
-                      proxy_check: bool = False) -> list:
+                      proxy_check: bool = False,
+                      verbose_output: bool = False) -> list:
     global TIMEOUT, MAX_RETRIES, CONCURRENT_REQUESTS
     TIMEOUT = timeout
     MAX_RETRIES = max_retries
     CONCURRENT_REQUESTS = concurrency
     
+    if verbose_output:
+        for cve in cves:
+            cve_info = await get_cve_info(cve)
+            if cve_info:
+                display_cve_info(cve_info)
+
     proxy_manager = None
     if use_proxy or proxy_file:
         if proxy_check:
@@ -206,11 +191,6 @@ async def scan_targets(ip_list: list, cves: list, output_file: str,
 
     try:
         async with aiohttp.ClientSession() as session:
-            for cve in cves:
-                cve_info = await get_cve_info(cve, session)
-                if cve_info:
-                    display_cve_info(cve_info)
-
             await asyncio.sleep(3)
             log("Scan started", "info")
             
