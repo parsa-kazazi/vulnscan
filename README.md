@@ -22,18 +22,6 @@ pip install -r requirements.txt
 
 ## Usage
 
-### Basic Scan:
-
-```bash
-python vulnscan.py -i 192.168.1.1 -c CVE-2022-27502
-```
-
-### Advanced Scan:
-
-```bash
-python vulnscan.py -if targets.txt -cf cves.txt -p -o results.json -w 20
-```
-
 ### Available Parameters:
 
 ```
@@ -71,25 +59,20 @@ General Options:
   -h, --help            Show this help message and exit
 ```
 
-## Usage Examples
+### Usage Examples
 
-1. Scan an IP range for two CVEs:
-
-```bash
-python vulnscan.py -i 10.0.0.1-10.0.0.100 -c CVE-2021-41380 CVE-2022-27502 -o results.txt
-```
-
-2. Scan IP list from file with proxies:
-
-```bash
-python vulnscan.py -if targets.txt -C vulnerabilities.txt -p -w 15
-```
-
-3. Fast scan with short timeout:
-
-```bash
-python vulnscan.py -i 192.168.1.1-192.168.1.254 -c CVE-2020-3452 -t 3 -r 2 -w 30
-```
+1. Basic scan:
+```python vulnscan.py -i 192.168.1.1 -c CVE-2022-27502 CVE-2021-41380```
+2. Scan IP range from file:
+```python vulnscan.py -if ips.txt -c CVE-2022-27502 -o results.txt```
+3. Scan with CVEs from file:
+```python vulnscan.py -i 10.0.0.1-10.0.0.100 -cf cves.txt```
+4. Scan with automatic proxies:
+```python vulnscan.py -i 192.168.1.1 -c CVE-2022-1234 -p```
+5. Scan with custom proxy file:
+```python vulnscan.py -if targets.txt -cf vulnerabilities.txt -pf proxies.txt```
+6. Advanced scan with all options:
+```python vulnscan.py -if targets.txt -cf cves.txt -pf proxies.txt -o output.json -t 20 -r 5 -w 50 -pt 200 -v```
 
 ## File Formats
 
