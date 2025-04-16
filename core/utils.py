@@ -1,8 +1,7 @@
-from netaddr import IPAddress, IPRange
-from urllib.parse import urlparse
 import os
 import json
 import re
+from netaddr import IPAddress, IPRange
 from colorama import Fore, Style
 
 VERBOSE = False
@@ -42,7 +41,7 @@ def validate_ip_range(ip_range: str) -> bool:
         return False
 
 def validate_cve(cve: str) -> bool:
-    cve_pattern = r'^CVE-\d{4}-\d{4,}$'
+    cve_pattern = r'^CVE-\d{4}-(0\d{3}|[1-9]\d{3,})$'
     return bool(re.match(cve_pattern, cve))
 
 def clean_cve_list(cves: list) -> list:
@@ -96,8 +95,20 @@ def load_cves_from_file(file_path: str) -> list:
 
 def validate_proxy(proxy: str) -> bool:
     try:
-        result = urlparse(proxy)
-        return all([result.scheme, result.netloc])
+        pattern = r'^(http|socks4|socks5)://([a-zA-Z0-9_.-]+(:[a-zA-Z0-9_.-]+)?@)?[a-zA-Z0-9_.-]+:[0-9]+$'
+        return bool(re.match(pattern, proxy))
+    except Exception:
+        return False
+
+def validate_proxy_file(file_path: str) -> bool:
+    if not os.path.exists(file_path):
+        return False
+    try:
+        with open(file_path, 'r') as f:
+            for line in f:
+                if line.strip() and validate_proxy(line.strip()):
+                    return True
+        return False
     except Exception:
         return False
 
