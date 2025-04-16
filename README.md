@@ -37,8 +37,8 @@ python vulnscan.py -if targets.txt -cf cves.txt -p -o results.json -w 20
 ### Available Parameters:
 
 ```
-usage: vulnscan.py [-i IP] [-if IP_FILE] [-c CVE [CVE ...]] [-cf CVE_FILE] [-o OUTPUT] [-p] [-pt PROXY_THREADS] [-t TIMEOUT] [-r RETRIES]
-                   [-w WORKERS] [-v] [-h]
+usage: vulnscan.py [-i IP] [-if IP_FILE] [-c CVE [CVE ...]] [-cf CVE_FILE] [-p] [-pf PROXY_FILE] [-pt PROXY_THREADS] [-o OUTPUT]
+                   [-t TIMEOUT] [-r RETRIES] [-w WORKERS] [-v] [-h]
 
 Target Options:
   -i, --ip IP           Single IP or IP range (e.g., 192.168.1.1 or 192.168.1.1-192.168.1.100)
@@ -51,11 +51,16 @@ Vulnerability Options:
   -cf, --cve-file CVE_FILE
                         File containing list of CVE IDs (one per line)
 
-General Options:
-  -o, --output OUTPUT   Output file (default: vulnerable.txt)
-  -p, --use-proxy       Use automatic proxy rotation to bypass rate limits
+Proxy Options:
+  -p, --use-proxy       Use automatic proxy rotation (download proxies from online sources)
+  -pf, --proxy-file PROXY_FILE
+                        File containing list of proxies (one per line)
+                        Formats: http[s]://[user:pass@]host:port or socks[4|5]://[user:pass@]host:port
   -pt, --proxy-threads PROXY_THREADS
                         Number of threads for proxy checking (default: 100)
+
+General Options:
+  -o, --output OUTPUT   Output file (default: vulnerable.txt)
   -t, --timeout TIMEOUT
                         Timeout in seconds for each request (default: 10)
   -r, --retries RETRIES
