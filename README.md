@@ -25,8 +25,7 @@ pip install -r requirements.txt
 ### Available Parameters:
 
 ```
-usage: vulnscan.py [-i IP] [-if IP_FILE] [-c CVE [CVE ...]] [-cf CVE_FILE] [-p] [-pf PROXY_FILE] [-pt PROXY_THREADS] [-o OUTPUT]
-                   [-t TIMEOUT] [-r RETRIES] [-w WORKERS] [-v] [-h]
+usage: vulnscan.py [-i IP] [-if IP_FILE] [-c CVE [CVE ...]] [-cf CVE_FILE] [-p] [-pf PROXY_FILE] [-pt PROXY_THREADS] [-o OUTPUT] [-t TIMEOUT] [-r RETRIES] [-w WORKERS] [-v] [-h]
 
 Target Options:
   -i, --ip IP           Single IP or IP range (e.g., 192.168.1.1 or 192.168.1.1-192.168.1.100)
@@ -50,7 +49,7 @@ Proxy Options:
 General Options:
   -o, --output OUTPUT   Output file (default: vulnerable.txt)
   -t, --timeout TIMEOUT
-                        Timeout in seconds for each request (default: 10)
+                        Timeout in seconds for each request (default: 5)
   -r, --retries RETRIES
                         Max retries for failed requests (default: 3)
   -w, --workers WORKERS
