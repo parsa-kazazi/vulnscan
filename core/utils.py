@@ -1,6 +1,7 @@
 import os
 import json
 import re
+import aiohttp
 from netaddr import IPAddress, IPRange
 from colorama import Fore, Style
 
@@ -111,6 +112,36 @@ def validate_proxy_file(file_path: str) -> bool:
         return False
     except Exception:
         return False
+
+async def get_cve_info(cve_id: str) -> dict:
+    try:
+        session = aiohttp.ClientSession()
+        response = await session.get(f"https://cvedb.shodan.io/cve/{cve_id}")
+        await session.close()
+        if response.status == 200:
+            return await response.json()
+        elif response.status == 404:
+            log(f"No information available for {cve_id}", "warning")
+        else:
+            log(f"Failed to get CVE info (Status: {response.status})", "warning")
+    except Exception as e:
+        await session.close()
+        log(f"Error fetching CVE info: {str(e)}", "error")
+    return None
+
+def display_cve_info(cve_info: dict):
+    log(f"CVE Information for {cve_info.get('cve_id', 'N/A')}:", "info")
+    print(f" - Summary: {cve_info.get('summary', 'N/A')}")
+    print(f" - CVSS Score: {cve_info.get('cvss_v3', cve_info.get('cvss', 'N/A'))}")
+    print(f" - Published: {cve_info.get('published_time', 'N/A')}")
+    print(f" - Known Exploited: {'Yes' if cve_info.get('kev', False) else 'No'}")
+    print(" - References:")
+    references = cve_info.get('references', ['N/A'])
+    for ref in references[:5]:
+        print(f"     {ref}")
+    if len(references) > 5:
+        print(f"     (+ {len(references)-5} more references)")
+    print()
 
 def save_results(vulnerable_hosts: list, output_file: str):
     try:
