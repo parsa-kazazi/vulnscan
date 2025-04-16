@@ -1,7 +1,6 @@
-
+import sys
 import argparse
 import asyncio
-import sys
 from colorama import Fore, Style, init
 from core.scanner import scan_targets
 from core.utils import (
@@ -28,14 +27,21 @@ def print_banner():
 def usage(parser):
     parser.print_help()
     print("\n\nExamples:")
-    print("  Scan single IP for multiple CVEs:")
+    print("  Basic scan:")
     print("    python vulnscan.py -i 192.168.1.1 -c CVE-2022-27502 CVE-2021-41380")
     print("  Scan IP range from file:")
     print("    python vulnscan.py -if ips.txt -c CVE-2022-27502 -o results.txt")
-    print("  Scan with multiple CVEs from file:")
-    print("    python vulnscan.py -i 10.0.0.1-10.0.0.100 -cf cves.txt -p")
-    print("  Full scan with all options:")
-    print("    python vulnscan.py -if targets.txt -cf vulnerabilities.txt -p -o output.txt -t 20 -r 5\n")
+    print("  Scan with CVEs from file:")
+    print("    python vulnscan.py -i 10.0.0.1-10.0.0.100 -cf cves.txt")
+    print("  Scan with automatic proxies:")
+    print("    python vulnscan.py -i 192.168.1.1 -c CVE-2022-1234 -p")
+    print("  Scan with custom proxy file:")
+    print("    python vulnscan.py -if targets.txt -cf vulnerabilities.txt -pf proxies.txt")
+    print("  Scan with proxy checking:")
+    print("    python vulnscan.py -i 10.0.0.1-10.0.0.100 -c CVE-2022-1234 -p -pc")
+    print("  Advanced scan with all options:")
+    print("    python vulnscan.py -if targets.txt -cf cves.txt -pf proxies.txt -o output.json -t 20 -r 5 -w 50 -pt 200 -pc -v\n")
+
 
 def parse_arguments():
     parser = argparse.ArgumentParser(
@@ -50,16 +56,23 @@ def parse_arguments():
     vuln_group = parser.add_argument_group('Vulnerability Options')
     vuln_group.add_argument('-c', '--cve', nargs='+', help='One or more CVE IDs (e.g., CVE-2022-27502)')
     vuln_group.add_argument('-cf', '--cve-file', type=str, help='File containing list of CVE IDs (one per line)')
-    
+
+    proxy_group = parser.add_argument_group('Proxy Options')
+    proxy_group.add_argument('-p', '--use-proxy', action='store_true', 
+                           help='Use automatic proxy rotation (download proxies from online sources)')
+    proxy_group.add_argument('-pf', '--proxy-file', type=str, 
+                           help='File containing list of proxies (one per line)\n'
+                                'Formats: http[s]://[user:pass@]host:port or socks[4|5]://[user:pass@]host:port')
+    proxy_group.add_argument('-pt', '--proxy-threads', type=int, default=100,
+                           help='Number of threads for proxy checking (default: 100)')
+    proxy_group.add_argument('-pc', '--proxy-check', action='store_true',
+                       help='Check and filter working proxies before use (for both online and file proxies)')
+
     general_group = parser.add_argument_group('General Options')
     general_group.add_argument('-o', '--output', type=str, default="vulnerable.txt", 
                              help=f'Output file (default: vulnerable.txt)')
-    general_group.add_argument('-p', '--use-proxy', action='store_true', 
-                             help='Use automatic proxy rotation to bypass rate limits')
-    general_group.add_argument('-pt', '--proxy-threads', type=int, default=100,
-                             help='Number of threads for proxy checking (default: 100)')
-    general_group.add_argument('-t', '--timeout', type=int, default=10, 
-                             help='Timeout in seconds for each request (default: 10)')
+    general_group.add_argument('-t', '--timeout', type=int, default=5, 
+                             help='Timeout in seconds for each request (default: 5)')
     general_group.add_argument('-r', '--retries', type=int, default=3, 
                              help='Max retries for failed requests (default: 3)')
     general_group.add_argument('-w', '--workers', type=int, default=10, 
@@ -123,15 +136,21 @@ def main():
         log("Error: No valid CVE IDs provided", "error")
         sys.exit(1)
     
+    if args.proxy_file and args.use_proxy:
+        log("Warning: Both proxy options specified (-p and -pf), using proxy file (-pf) takes precedence", "warning")
+        args.use_proxy = False
+    
     log(f"Target: {args.ip_file if args.ip_file else args.ip}", "info")
     log(f"CVEs: {args.cve_file if args.cve_file else ', '.join(args.cve)}", "info")
     log(f"Output file: {args.output}", "info")
     log(f"Timeout: {args.timeout}s", "info")
     log(f"Retries: {args.retries}", "info")
     log(f"Workers: {args.workers}", "info")
-    log(f"Proxy: {'Enabled' if args.use_proxy else 'Disabled'}", "info")
-    if args.use_proxy:
+    log(f"Proxy: {'Enabled (file)' if args.proxy_file else 'Enabled (auto)' if args.use_proxy else 'Disabled'}", "info")
+    if args.proxy_file or args.use_proxy:
         log(f"Proxy threads: {args.proxy_threads}", "info")
+        if args.proxy_file:
+            log(f"Proxy file: {args.proxy_file}", "info")
     log(f"Verbose: {'Enabled' if args.verbose else 'Disabled'}")
     print()
     
@@ -142,10 +161,12 @@ def main():
                 cves=cves,
                 output_file=args.output,
                 use_proxy=args.use_proxy,
+                proxy_file=args.proxy_file,
                 timeout=args.timeout,
                 max_retries=args.retries,
                 concurrency=args.workers,
-                proxy_threads=args.proxy_threads
+                proxy_threads=args.proxy_threads,
+                proxy_check=args.proxy_check
             )
         )
         
