@@ -15,7 +15,9 @@ async def download_proxies(validate=False, timeout=5):
     ]
     
     proxies = []
-    
+
+    log("Downloading fresh proxies from online sources", "info")
+
     for url in urls:
         try:
             async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=timeout)) as session:
@@ -111,7 +113,6 @@ async def load_proxies(proxy_file: str = None, timeout: int = 5, threads: int = 
             log(f"Failed to load proxies from file: {str(e)}", "error")
             return []
     
-    log("Downloading fresh proxies from online sources", "info")
     raw_proxies = await download_proxies()
     if not raw_proxies:
         log("No proxies downloaded", "error")
