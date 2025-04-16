@@ -1,13 +1,12 @@
-import requests
 import time
+import re
 import asyncio
 import aiohttp
-from concurrent.futures import ThreadPoolExecutor, as_completed
-from .utils import log
+from .utils import log, validate_proxy
 
 download_lock = asyncio.Lock()
 
-async def download_proxies():
+async def download_proxies(validate=False, timeout=5):
     urls = [
         "https://raw.githubusercontent.com/proxifly/free-proxy-list/main/proxies/all/data.txt",
         "https://raw.githubusercontent.com/monosans/proxy-list/main/proxies/all.txt",
@@ -19,80 +18,103 @@ async def download_proxies():
     
     for url in urls:
         try:
-            async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=10)) as session:
+            async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=timeout)) as session:
                 log(f"Downloading proxies from: {url}", "info", verbose=True)
                 async with session.get(url) as response:
                     if response.status == 200:
                         text = await response.text()
                         proxies.extend([line.strip() for line in text.splitlines() if line.strip()])
-                    else:
-                        log(f"Failed to download {url} - Status: {response.status}", "warning", verbose=True)
-        except Exception as e:
-            log(f"Failed to download {url} - {str(e)}", "warning", verbose=True)
+        except Exception:
+            continue
     
     proxies = list({p for p in proxies if p.startswith(('http://', 'socks4://', 'socks5://'))})
-    log(f"Total downloaded proxies: {len(proxies)}\n", "info")
+    
+    if validate:
+        return await check_proxies(proxies, timeout)
     return proxies
 
-def check_proxy(proxy):
+async def check_proxy(proxy, timeout=5):
     try:
-        proxies = {}
         test_url = 'https://api.ipify.org'
         
-        if proxy.startswith('http://'):
-            proxies = {"http": proxy, "https": proxy}
-        elif proxy.startswith(('socks4://', 'socks5://')):
-            proxies = {"http": proxy, "https": proxy}
-        else:
+        if not proxy or not isinstance(proxy, str):
             return False
+            
+        if '@' in proxy:
+            if not re.match(r'^[a-zA-Z]+://[^:@]+:[^:@]+@[^:@]+:[0-9]+$', proxy):
+                return False
+        else:
+            if not re.match(r'^[a-zA-Z]+://[^:@]+:[0-9]+$', proxy):
+                return False
         
-        start_time = time.time()
-        response = requests.get(test_url, proxies=proxies, timeout=5)
-        end_time = time.time()
+        connector = aiohttp.TCPConnector(force_close=True)
+        timeout = aiohttp.ClientTimeout(total=timeout)
         
-        if response.status_code == 200:
-            speed = end_time - start_time
-            return True, speed
-        return False
+        async with aiohttp.ClientSession(connector=connector, timeout=timeout) as session:
+            headers = {'User-Agent': 'Mozilla/5.0'}
+            
+            start_time = time.time()
+            try:
+                async with session.get(test_url, 
+                                    proxy=proxy, 
+                                    headers=headers) as response:
+                    if response.status == 200:
+                        end_time = time.time()
+                        speed = end_time - start_time
+                        return True, speed
+                    return False
+            except asyncio.TimeoutError:
+                log(f"Proxy timeout: {proxy}", "warning", verbose=True)
+                return False
+            except Exception as e:
+                log(f"Proxy error: {proxy} - {str(e)}", "warning", verbose=True)
+                return False
+                
     except Exception as e:
+        log(f"Unexpected error checking proxy {proxy}: {str(e)}", "warning", verbose=True)
         return False
 
-async def get_fresh_proxies(threads=100):
-    try:
-        log("Starting proxy update process...", "info")
-        start_time = time.time()
-        
-        proxies = await download_proxies()
-        if not proxies:
-            log("No proxies available for checking", "error")
+async def check_proxies(proxies: list, timeout: int = 5, threads: int = 100) -> list:
+    working_proxies = []
+    semaphore = asyncio.Semaphore(threads)
+    
+    async def _check_and_add(proxy):
+        async with semaphore:
+            result = await check_proxy(proxy, timeout)
+            if result:
+                is_working, speed = result
+                if is_working:
+                    working_proxies.append((proxy, speed))
+                    log(f"Working proxy: {proxy} (Response: {speed:.2f}s)", "success")
+            else:
+                log(f"Failed proxy: {proxy}", "warning", verbose=True)
+    
+    tasks = [_check_and_add(proxy) for proxy in proxies]
+    await asyncio.gather(*tasks)
+    
+    working_proxies.sort(key=lambda x: x[1])
+    return [proxy for proxy, speed in working_proxies]
+
+async def load_proxies(proxy_file: str = None, timeout: int = 5, threads: int = 100) -> list:
+    if proxy_file:
+        log(f"Loading proxies from file: {proxy_file}", "info")
+        try:
+            with open(proxy_file, 'r') as f:
+                proxies = [line.strip() for line in f if line.strip()]
+            proxies = [p for p in proxies if validate_proxy(p)]
+            if not proxies:
+                log("No valid proxies found in file", "error")
+                return []
+                
+            return await check_proxies(proxies, timeout, threads)
+        except Exception as e:
+            log(f"Failed to load proxies from file: {str(e)}", "error")
             return []
-        
-        working_proxies = []
-        with ThreadPoolExecutor(max_workers=threads) as executor:
-            future_to_proxy = {
-                executor.submit(check_proxy, proxy): proxy
-                for proxy in proxies
-            }
-            
-            for future in as_completed(future_to_proxy):
-                proxy = future_to_proxy[future]
-                try:
-                    result = future.result()
-                    if result:
-                        is_working, speed = result
-                        if is_working:
-                            working_proxies.append(proxy)
-                            log(f"Working proxy: {proxy} (Response: {speed:.2f}s)", "success")
-                    else:
-                        log(f"Failed proxy: {proxy}", "warning", verbose=True)
-                except Exception as e:
-                    log(f"Error checking proxy {proxy}: {str(e)}", "warning", verbose=True)
-        
-        elapsed = time.time() - start_time
-        log(f"Proxy update completed. Working proxies: {len(working_proxies)}/{len(proxies)} (Took: {elapsed:.2f}s)", 
-            "success" if working_proxies else "error")
-        
-        return working_proxies
-    except Exception as e:
-        log(f"Error in proxy update: {str(e)}", "error")
+    
+    log("Downloading fresh proxies from online sources", "info")
+    raw_proxies = await download_proxies()
+    if not raw_proxies:
+        log("No proxies downloaded", "error")
         return []
+    
+    return await check_proxies(raw_proxies, timeout, threads)
