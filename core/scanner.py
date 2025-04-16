@@ -1,15 +1,10 @@
+import sys
+import time
+import random
 import aiohttp
 import asyncio
-import random
-import time
-import json
-import sys
-from .proxy import get_fresh_proxies
-from .utils import log, save_results, save_immediate_result
-
-TIMEOUT = 5
-MAX_RETRIES = 3
-CONCURRENT_REQUESTS = 10
+from .proxy import load_proxies, download_proxies
+from .utils import log, save_immediate_result
 
 async def handle_response(response, ip: str, cves: list, proxy_manager: dict) -> tuple:
     try:
@@ -84,8 +79,9 @@ async def scan(ip: str, cves: list, session: aiohttp.ClientSession,
                     if proxy_manager:
                         if not proxy_manager['proxies'] or time.time() - proxy_manager['last_refresh'] > 3600:
                             log("Proxy list empty or expired, refreshing...", "info")
-                            proxy_manager['proxies'] = await get_fresh_proxies(
-                                proxy_manager.get('threads', 100)
+                            proxy_manager['proxies'] = await load_proxies(
+                                timeout=TIMEOUT,
+                                threads=proxy_manager.get('threads', 100)
                             )
                             proxy_manager['last_refresh'] = time.time()
                             proxy_manager['current_index'] = 0
@@ -162,29 +158,51 @@ def display_cve_info(cve_info: dict):
     print()
 
 async def scan_targets(ip_list: list, cves: list, output_file: str, 
-                      use_proxy: bool, timeout: int, max_retries: int, 
-                      concurrency: int, proxy_threads: int = 100) -> list:
+                      timeout: int, max_retries: int, 
+                      concurrency: int, proxy_threads: int = 100,
+                      use_proxy: bool = False, proxy_file: str = None,
+                      proxy_check: bool = False) -> list:
     global TIMEOUT, MAX_RETRIES, CONCURRENT_REQUESTS
     TIMEOUT = timeout
     MAX_RETRIES = max_retries
     CONCURRENT_REQUESTS = concurrency
     
     proxy_manager = None
-    if use_proxy:
-        fresh_proxies = await get_fresh_proxies(proxy_threads)
-        proxy_manager = {
-            'proxies': fresh_proxies,
-            'current_index': 0,
-            'last_refresh': time.time(),
-            'threads': proxy_threads
-        }
+    if use_proxy or proxy_file:
+        if proxy_check:
+            fresh_proxies = await load_proxies(
+                proxy_file=proxy_file,
+                timeout=timeout,
+                threads=proxy_threads
+            )
+        else:
+            if proxy_file:
+                with open(proxy_file, 'r') as f:
+                    fresh_proxies = [line.strip() for line in f if line.strip()]
+            else:
+                fresh_proxies = await download_proxies()
+        
+        if fresh_proxies:
+            proxy_manager = {
+                'proxies': fresh_proxies,
+                'current_index': 0,
+                'last_refresh': time.time(),
+                'threads': proxy_threads,
+                'failed_proxies': {}
+            }
+            log(f"Using {len(fresh_proxies)} {'working ' if proxy_check else ''}proxies", "success")
+        else:
+            log("No proxies available, aborting scan", "error")
+            return []
     
     semaphore = asyncio.Semaphore(CONCURRENT_REQUESTS)
     exit_event = asyncio.Event()
     vulnerable_hosts = []
+    total_ips = len(ip_list)
+    scanned_ips = 0
+    last_progress_update = 0
 
     json_output = output_file.replace('.txt', '.json') if output_file.endswith('.txt') else output_file + '.json'
-    file_created = False
 
     try:
         async with aiohttp.ClientSession() as session:
@@ -196,50 +214,46 @@ async def scan_targets(ip_list: list, cves: list, output_file: str,
             await asyncio.sleep(3)
             log("Scan started", "info")
             
-            tasks = [asyncio.create_task(scan(ip, cves, session, semaphore, exit_event, proxy_manager)) for ip in ip_list]
+            tasks = []
+            for ip in ip_list:
+                if exit_event.is_set():
+                    break
+                
+                task = asyncio.create_task(scan(ip, cves, session, semaphore, exit_event, proxy_manager))
+                tasks.append(task)
+            
+            async def report_progress():
+                nonlocal scanned_ips, last_progress_update
+                while scanned_ips < total_ips and not exit_event.is_set():
+                    current_time = time.time()
+                    if (current_time - last_progress_update > 5) or (scanned_ips % max(1, total_ips//10)) == 0:
+                        progress = (scanned_ips / total_ips) * 100
+                        log(f"Scan progress: {progress:.1f}% ({scanned_ips}/{total_ips} IPs)", "info")
+                        last_progress_update = current_time
+                    await asyncio.sleep(1)
+            
+            progress_task = asyncio.create_task(report_progress())
             
             try:
                 for task in asyncio.as_completed(tasks):
                     try:
                         result = await task
+                        scanned_ips += 1
                         if result:
                             vulnerable_hosts.append(result)
-                            if len(result['vulns']) == 1:
-                                log(f"{result['ip']} is vulnerable to {result['vulns'][0]}", "success")
-                            else:
-                                log(f"{result['ip']} is vulnerable to {', '.join(result['vulns'])}", "success")
-                            
-                            if not file_created:
-                                with open(output_file, 'w') as f:
-                                    pass
-                                with open(json_output, 'w') as f:
-                                    json.dump([], f)
-                                file_created = True
-                            
                             save_immediate_result(result, output_file, json_output, vulnerable_hosts)
                     except Exception as e:
                         log(f"Unexpected error: {str(e)}", "error")
-            except Exception as e:
-                log(f"Scan interrupted: {str(e)}", "error")
-                exit_event.set()
-                for t in tasks:
-                    t.cancel()
-                await asyncio.gather(*tasks, return_exceptions=True)
-                raise
-            
+                        scanned_ips += 1
+            finally:
+                progress_task.cancel()
+                try:
+                    await progress_task
+                except asyncio.CancelledError:
+                    pass
+                
     except Exception as e:
         log(f"Fatal error: {str(e)}", "error")
         sys.exit(1)
-        
-    if vulnerable_hosts:
-        save_results(vulnerable_hosts, output_file)
-    else:
-        log("No vulnerable IPs found", "info")
-        if file_created:
-            import os
-            if os.path.exists(output_file):
-                os.remove(output_file)
-            if os.path.exists(json_output):
-                os.remove(json_output)
         
     return vulnerable_hosts
