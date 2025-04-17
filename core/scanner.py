@@ -6,6 +6,7 @@ import asyncio
 from .proxy import load_proxies, download_proxies
 from .utils import (
     log,
+    save_results,
     save_immediate_result,
     get_cve_info,
     display_cve_info
@@ -203,7 +204,7 @@ async def scan_targets(
     proxy_file: str = None,
     proxy_check: bool = False,
     verbose_output: bool = False
-    ) -> list:
+) -> list:
     global TIMEOUT, MAX_RETRIES, CONCURRENT_REQUESTS
     TIMEOUT = timeout
     MAX_RETRIES = max_retries
@@ -244,18 +245,19 @@ async def scan_targets(
             log("No proxies available, aborting scan", "error")
             return []
     
-    BATCH_SIZE = 1000
+    BATCH_SIZE = 100
     vulnerable_hosts = []
     exit_event = asyncio.Event()
     semaphore = asyncio.Semaphore(CONCURRENT_REQUESTS)
     json_output = output_file.replace('.txt', '.json') if output_file.endswith('.txt') else output_file + '.json'
+    actually_scanned = 0
+    last_report = 0
+    report_interval = 50
 
     try:
         async with aiohttp.ClientSession() as session:
             log("Scan started", "info")
-            processed_ips = 0
             batch = []
-            scanned_ips = 0
 
             for ip in ip_list:
                 if exit_event.is_set():
@@ -265,28 +267,34 @@ async def scan_targets(
                 if len(batch) >= BATCH_SIZE:
                     batch_results = await process_batch(batch, cves, session, semaphore, exit_event, proxy_manager)
                     vulnerable_hosts.extend(batch_results)
-                    processed_ips += len(batch)
-                    scanned_ips += len(batch) - batch.count(None)
+                    actually_scanned += len(batch)
+                    batch = []
 
                     if vulnerable_hosts:
                         save_immediate_result(batch_results, output_file, json_output, vulnerable_hosts)
 
-                    log(f"{scanned_ips} IPs scanned", "info")
-                    batch = []
+                    if actually_scanned - last_report >= report_interval or exit_event.is_set():
+                        log(f"{actually_scanned} IPs scanned", "info")
+                        last_report = actually_scanned
 
             if batch and not exit_event.is_set():
                 batch_results = await process_batch(batch, cves, session, semaphore, exit_event, proxy_manager)
                 vulnerable_hosts.extend(batch_results)
-                processed_ips += len(batch)
-                scanned_ips += len(batch) - batch.count(None)
+                actually_scanned += len(batch)
                 if vulnerable_hosts:
                     save_immediate_result(batch_results, output_file, json_output, vulnerable_hosts)
-
-            log(f"{scanned_ips} IPs scanned", "info")
 
     except KeyboardInterrupt:
         log("Scan cancelled by user", "warning")
     except Exception as e:
         log(f"Unexpected error: {str(e)}", "error")
+    finally:
+        if actually_scanned > 0:
+            log(f"{actually_scanned} IPs scanned", "info")
+
+    if vulnerable_hosts:
+        save_results(vulnerable_hosts, output_file)
+    else:
+        log("No vulnerable IPs found", "info")
 
     return vulnerable_hosts
