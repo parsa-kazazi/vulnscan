@@ -1,4 +1,3 @@
-import sys
 import time
 import random
 import aiohttp
@@ -6,7 +5,6 @@ import asyncio
 from .proxy import load_proxies, download_proxies
 from .utils import (
     log,
-    save_results,
     save_immediate_result,
     get_cve_info,
     display_cve_info

@@ -1,7 +1,7 @@
 import sys
 import argparse
 import asyncio
-from colorama import Fore, Style, init
+from colorama import Fore, init
 from core.scanner import scan_targets
 from core.utils import (
     log, 
