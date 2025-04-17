@@ -123,13 +123,6 @@ def main():
     else:
         cves = args.cve
     
-
-    if args.cve_file:
-        with open(args.cve_file, 'r') as f:
-            cves = [line.strip() for line in f if line.strip()]
-    else:
-        cves = args.cve
-    
     cves = clean_cve_list(cves)
     
     if not cves:

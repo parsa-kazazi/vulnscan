@@ -20,7 +20,7 @@ async def download_proxies(validate=False, timeout=5):
 
     for url in urls:
         try:
-            async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=timeout)) as session:
+            async with aiohttp.ClientSession() as session:
                 log(f"Downloading proxies from: {url}", "info", verbose=True)
                 async with session.get(url) as response:
                     if response.status == 200:

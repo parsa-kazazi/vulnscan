@@ -71,23 +71,39 @@ def get_ip_list(target: str) -> list:
     
     return [target] if validate_ip(target) else []
 
-def get_range(start_ip: str, end_ip: str) -> list:
+def get_range(start_ip: str, end_ip: str):
     start = IPAddress(start_ip)
     end = IPAddress(end_ip)
     ip_range = IPRange(start, end)
-    return [str(ip) for ip in sorted(ip_range, key=lambda x: x.value)]
+    for ip in ip_range:
+        yield str(ip)
 
-def load_ips_from_file(file_path: str) -> list:
+def load_ips_from_file(file_path: str):
     with open(file_path, 'r') as f:
-        ips = []
         for line in f:
             line = line.strip()
             if validate_ip(line):
-                ips.append(line)
+                yield line
             elif '-' in line and validate_ip_range(line):
                 start, end = line.split('-')
-                ips.extend(get_range(start, end))
-        return ips
+                yield from get_range(start, end)
+
+def count_ips_in_range(start_ip: str, end_ip: str) -> int:
+    start = IPAddress(start_ip)
+    end = IPAddress(end_ip)
+    return int(end) - int(start) + 1
+
+def count_ips_in_file(file_path: str) -> int:
+    count = 0
+    with open(file_path, 'r') as f:
+        for line in f:
+            line = line.strip()
+            if validate_ip(line):
+                count += 1
+            elif '-' in line and validate_ip_range(line):
+                start, end = line.split('-')
+                count += count_ips_in_range(start, end)
+    return count
 
 def load_cves_from_file(file_path: str) -> list:
     with open(file_path, 'r') as f:
