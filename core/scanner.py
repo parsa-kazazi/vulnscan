@@ -60,6 +60,7 @@ async def handle_response(response, ip: str, cves: list, proxy_manager: dict) ->
             if not proxy_manager:
                 if not hasattr(handle_response, 'rate_limit_reported'):
                     log("API rate limit reached. Stopping scan.", "warning")
+                    log("Use proxies or try again later.", "warning")
                     handle_response.rate_limit_reported = True
                 raise asyncio.CancelledError("Rate limit reached")
             return None, True
