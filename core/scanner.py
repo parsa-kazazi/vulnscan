@@ -60,8 +60,8 @@ async def handle_response(response, ip: str, cves: list, proxy_manager: dict) ->
         elif response.status == 429:
             if not proxy_manager:
                 if not hasattr(handle_response, 'rate_limit_reported'):
-                    log("API rate limit reached. Stopping scan.", "warning")
-                    log("Use proxies or try again later.", "warning")
+                    log("API rate limit reached. Stopping scan.", "error")
+                    log("Use proxies or try again later.", "error")
                     handle_response.rate_limit_reported = True
                 raise asyncio.CancelledError("Rate limit reached")
             return None, True
@@ -251,13 +251,29 @@ async def scan_targets(
     semaphore = asyncio.Semaphore(CONCURRENT_REQUESTS)
     json_output = output_file.replace('.txt', '.json') if output_file.endswith('.txt') else output_file + '.json'
     actually_scanned = 0
-    last_report = 0
-    report_interval = 50
+    last_report_time = time.time()
+    report_interval = 30
+
+    ip_list = list(ip_list)
+    total_ips = len(ip_list)
+    log(f"Total IPs to scan: {total_ips}", "info")
+
+    async def progress_reporter():
+        nonlocal actually_scanned, last_report_time
+        while not exit_event.is_set() and actually_scanned < total_ips:
+            await asyncio.sleep(1)
+            current_time = time.time()
+            if current_time - last_report_time >= report_interval:
+                percentage = (actually_scanned / float(total_ips)) * 100 if total_ips > 0 else 0
+                log(f"Progress: {actually_scanned}/{total_ips} IPs scanned ({percentage:.2f}%)", "info")
+                last_report_time = current_time
 
     try:
         async with aiohttp.ClientSession() as session:
             log("Scan started", "info")
             batch = []
+
+            progress_task = asyncio.create_task(progress_reporter())
 
             for ip in ip_list:
                 if exit_event.is_set():
@@ -273,10 +289,6 @@ async def scan_targets(
                     if vulnerable_hosts:
                         save_immediate_result(batch_results, output_file, json_output, vulnerable_hosts)
 
-                    if actually_scanned - last_report >= report_interval or exit_event.is_set():
-                        log(f"{actually_scanned} IPs scanned", "info")
-                        last_report = actually_scanned
-
             if batch and not exit_event.is_set():
                 batch_results = await process_batch(batch, cves, session, semaphore, exit_event, proxy_manager)
                 vulnerable_hosts.extend(batch_results)
@@ -284,17 +296,19 @@ async def scan_targets(
                 if vulnerable_hosts:
                     save_immediate_result(batch_results, output_file, json_output, vulnerable_hosts)
 
+            progress_task.cancel()
+            try:
+                await progress_task
+            except asyncio.CancelledError:
+                pass
+
     except KeyboardInterrupt:
         log("Scan cancelled by user", "warning")
     except Exception as e:
         log(f"Unexpected error: {str(e)}", "error")
     finally:
         if actually_scanned > 0:
-            log(f"{actually_scanned} IPs scanned", "info")
-
-    if vulnerable_hosts:
-        save_results(vulnerable_hosts, output_file)
-    else:
-        log("No vulnerable IPs found", "info")
+            percentage = (actually_scanned / total_ips) * 100 if total_ips > 0 else 0
+            log(f"Scan completed: {actually_scanned}/{total_ips} IPs scanned ({percentage:.1f}%)", "info")
 
     return vulnerable_hosts
