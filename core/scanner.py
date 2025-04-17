@@ -1,194 +1,312 @@
-import os
-import json
-import re
+import time
+import random
 import aiohttp
-from netaddr import IPAddress, IPRange
-from colorama import Fore, Style
+import asyncio
+from .proxy import load_proxies, download_proxies
+from .utils import (
+    log,
+    save_immediate_result,
+    get_cve_info,
+    display_cve_info
+)
 
-VERBOSE = False
-
-def set_verbose(verbose):
-    global VERBOSE
-    VERBOSE = verbose
-
-def log(message, level="info", verbose=False):
-    if verbose and not VERBOSE:
-        return
+async def handle_response(response, ip: str, cves: list, proxy_manager: dict) -> tuple:
+    try:
+        content_type = response.headers.get('Content-Type', '')
         
-    levels = {
-        "info": f"{Fore.LIGHTBLUE_EX}[*]{Style.RESET_ALL}",
-        "success": f"{Fore.LIGHTGREEN_EX}[+]{Style.RESET_ALL}",
-        "warning": f"{Fore.LIGHTYELLOW_EX}[!]{Style.RESET_ALL}",
-        "error": f"{Fore.LIGHTRED_EX}[-]{Style.RESET_ALL}",
-    }
-    print(f"{levels.get(level, levels['info'])} {message}")
-
-def validate_ip(ip: str) -> bool:
-    try:
-        IPAddress(ip)
-        return True
-    except Exception:
-        return False
-
-def validate_ip_range(ip_range: str) -> bool:
-    try:
-        if '-' in ip_range:
-            start, end = ip_range.split('-')
-            IPAddress(start)
-            IPAddress(end)
-            return True
-        return validate_ip(ip_range)
-    except Exception:
-        return False
-
-def validate_cve(cve: str) -> bool:
-    cve_pattern = r'^CVE-\d{4}-(0\d{3}|[1-9]\d{3,})$'
-    return bool(re.match(cve_pattern, cve))
-
-def clean_cve_list(cves: list) -> list:
-    unique_cves = []
-    seen = set()
-    
-    for cve in cves:
-        if not validate_cve(cve):
-            log(f"Ignoring invalid CVE format: {cve}", "warning")
-            continue
+        if 'text/html' in content_type:
+            if response.status == 403:
+                log(f"Access forbidden on {ip}", "warning", verbose=True)
+                return None, False
+            return None, False
         
-        cve_upper = cve.upper()
-        if cve_upper not in seen:
-            seen.add(cve_upper)
-            unique_cves.append(cve_upper)
-    
-    return unique_cves
-
-def get_ip_list(target: str) -> list:
-    if os.path.exists(target):
-        return load_ips_from_file(target)
-    
-    if '-' in target:
-        start, end = target.split('-')
-        return get_range(start, end)
-    
-    return [target] if validate_ip(target) else []
-
-def get_range(start_ip: str, end_ip: str):
-    start = IPAddress(start_ip)
-    end = IPAddress(end_ip)
-    ip_range = IPRange(start, end)
-    for ip in ip_range:
-        yield str(ip)
-
-def load_ips_from_file(file_path: str):
-    with open(file_path, 'r') as f:
-        for line in f:
-            line = line.strip()
-            if validate_ip(line):
-                yield line
-            elif '-' in line and validate_ip_range(line):
-                start, end = line.split('-')
-                yield from get_range(start, end)
-
-def count_ips_in_range(start_ip: str, end_ip: str) -> int:
-    start = IPAddress(start_ip)
-    end = IPAddress(end_ip)
-    return int(end) - int(start) + 1
-
-def count_ips_in_file(file_path: str) -> int:
-    count = 0
-    with open(file_path, 'r') as f:
-        for line in f:
-            line = line.strip()
-            if validate_ip(line):
-                count += 1
-            elif '-' in line and validate_ip_range(line):
-                start, end = line.split('-')
-                count += count_ips_in_range(start, end)
-    return count
-
-def load_cves_from_file(file_path: str) -> list:
-    with open(file_path, 'r') as f:
-        cves = [line.strip() for line in f if line.strip()]
-    return clean_cve_list(cves)
-
-def validate_proxy(proxy: str) -> bool:
-    try:
-        pattern = r'^(http|socks4|socks5)://([a-zA-Z0-9_.-]+(:[a-zA-Z0-9_.-]+)?@)?[a-zA-Z0-9_.-]+:[0-9]+$'
-        return bool(re.match(pattern, proxy))
-    except Exception:
-        return False
-
-def validate_proxy_file(file_path: str) -> bool:
-    if not os.path.exists(file_path):
-        return False
-    try:
-        with open(file_path, 'r') as f:
-            for line in f:
-                if line.strip() and validate_proxy(line.strip()):
-                    return True
-        return False
-    except Exception:
-        return False
-
-async def get_cve_info(cve_id: str) -> dict:
-    try:
-        session = aiohttp.ClientSession()
-        response = await session.get(f"https://cvedb.shodan.io/cve/{cve_id}")
-        await session.close()
+        try:
+            response_data = await response.json() if response.status != 204 else {}
+        except ValueError:
+            if response.status == 200:
+                log(f"Invalid JSON from {ip}", "warning", verbose=True)
+            return None, False
+        
         if response.status == 200:
-            return await response.json()
+            if not response_data:
+                log(f"Empty response from {ip}", "warning", verbose=True)
+                return None, False
+                
+            if "vulns" in response_data:
+                found_vulns = [vuln for vuln in cves if vuln in response_data["vulns"]]
+                if found_vulns:
+                    result = {
+                        "ip": ip,
+                        "ports": response_data.get("ports", []),
+                        "cpes": response_data.get("cpes", []),
+                        "hostnames": response_data.get("hostnames", []),
+                        "tags": response_data.get("tags", []),
+                        "vulns": found_vulns,
+                        "all_vulns": response_data.get("vulns", [])
+                    }
+                    if len(found_vulns) == 1:
+                        log(f"{ip} is vulnerable to {found_vulns[0]}", "success")
+                    else:
+                        log(f"{ip} is vulnerable to {', '.join(found_vulns)}", "success")
+                    return result, False
+            return None, False
+        
         elif response.status == 404:
-            log(f"No information available for {cve_id}", "warning")
+            log(f"{ip} not found in shodan", "warning", verbose=True)
+            return None, False
+        
+        elif response.status == 429:
+            if not proxy_manager:
+                if not hasattr(handle_response, 'rate_limit_reported'):
+                    log("API rate limit reached. Stopping scan.", "error")
+                    log("Use proxies or try again later.", "error")
+                    handle_response.rate_limit_reported = True
+                raise asyncio.CancelledError("Rate limit reached")
+            return None, True
+        
+        elif response.status == 403:
+            log(f"Access forbidden on {ip}", "warning", verbose=True)
+            return None, False
+        
+        elif response.status == 401:
+            log(f"Unauthorized access on {ip}", "error", verbose=True)
+            return None, False
+        
         else:
-            log(f"Failed to get CVE info (Status: {response.status})", "warning")
-    except Exception as e:
-        await session.close()
-        log(f"Error fetching CVE info: {str(e)}", "error")
-    return None
-
-def display_cve_info(cve_info: dict):
-    log(f"CVE Information for {cve_info.get('cve_id', 'N/A')}:", "info")
-    print(f" - Summary: {cve_info.get('summary', 'N/A')}")
-    print(f" - CVSS Score: {cve_info.get('cvss_v3', cve_info.get('cvss', 'N/A'))}")
-    print(f" - Published: {cve_info.get('published_time', 'N/A')}")
-    print(f" - Known Exploited: {'Yes' if cve_info.get('kev', False) else 'No'}")
-    print(" - References:")
-    references = cve_info.get('references', ['N/A'])
-    for ref in references[:5]:
-        print(f"     {ref}")
-    if len(references) > 5:
-        print(f"     (+ {len(references)-5} more references)")
-    print()
-
-def save_results(vulnerable_hosts: list, output_file: str):
-    try:
-        json_output = output_file.replace('.txt', '.json') if output_file.endswith('.txt') else output_file + '.json'
-        
-        with open(output_file, 'w') as f:
-            for host in vulnerable_hosts:
-                if len(host['vulns']) == 1:
-                    f.write(f"{host['ip']} is vulnerable to {host['vulns'][0]}\n")
-                else:
-                    f.write(f"{host['ip']} is vulnerable to {', '.join(host['vulns'])}\n")
-        
-        with open(json_output, 'w') as f:
-            json.dump(vulnerable_hosts, f, indent=2)
-        
-        log(f"Found {len(vulnerable_hosts)} vulnerable IPs", "success")
-        log(f"Results saved to {output_file} and {json_output}", "info")
-    except Exception as e:
-        log(f"Failed to save final results: {str(e)}", "error")
-
-def save_immediate_result(result: dict, txt_file: str, json_file: str, vulnerable_hosts: list):
-    try:
-        with open(txt_file, 'w') as f:
-            for host in vulnerable_hosts:
-                if len(host['vulns']) == 1:
-                    f.write(f"{host['ip']} is vulnerable to {host['vulns'][0]}\n")
-                else:
-                    f.write(f"{host['ip']} is vulnerable to {', '.join(host['vulns'])}\n")
-        
-        with open(json_file, 'w') as f:
-            json.dump(vulnerable_hosts, f, indent=2)
+            log(f"Failed to scan {ip} (Status: {response.status})", "error", verbose=True)
+            return None, False
             
     except Exception as e:
-        log(f"Failed to save immediate result: {str(e)}", "error")
+        log(f"Error processing {ip}: {str(e)}", "error", verbose=True)
+        return None, False
+
+async def scan(ip: str, cves: list, session: aiohttp.ClientSession, 
+              semaphore: asyncio.Semaphore, exit_event: asyncio.Event, 
+              proxy_manager: dict) -> dict:
+    try:
+        async with semaphore:
+            for retry in range(MAX_RETRIES):
+                if exit_event.is_set():
+                    return None
+                    
+                try:
+                    proxy = None
+                    if proxy_manager:
+                        async with proxy_manager['lock']:
+                            if not proxy_manager['proxies'] or time.time() - proxy_manager['last_refresh'] > 3600:
+                                log("Proxy list empty or expired, refreshing...", "info")
+                                proxy_manager['proxies'] = await load_proxies(
+                                    timeout=TIMEOUT,
+                                    threads=proxy_manager.get('threads', 100)
+                                )
+                                proxy_manager['last_refresh'] = time.time()
+                                proxy_manager['current_index'] = 0
+                            
+                            if proxy_manager['proxies']:
+                                proxy = proxy_manager['proxies'][proxy_manager['current_index'] % len(proxy_manager['proxies'])]
+                                proxy_manager['current_index'] += 1
+                    
+                    log(f"Scanning {ip} with {'proxy ' + proxy if proxy else 'direct connection'}", "info", verbose=True)
+                    
+                    async with session.get(f"https://internetdb.shodan.io/{ip}", 
+                                        timeout=TIMEOUT, 
+                                        proxy=proxy,
+                                        headers={'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'}) as response:
+                        result, rate_limit = await handle_response(response, ip, cves, proxy_manager)
+                        
+                        if rate_limit and proxy_manager and proxy:
+                            log(f"Proxy rate limited: {proxy}", "warning", verbose=True)
+                            async with proxy_manager['lock']:
+                                if proxy in proxy_manager['proxies']:
+                                    proxy_manager['proxies'].remove(proxy)
+                            await asyncio.sleep(5)
+                            
+                        if result or response.status in [200, 404]:
+                            return result
+
+                except asyncio.CancelledError:
+                    exit_event.set()
+                    return None
+                except asyncio.TimeoutError:
+                    log(f"Timeout on {ip} (attempt {retry + 1}/{MAX_RETRIES})", "warning", verbose=True)
+                    if proxy_manager and proxy:
+                        async with proxy_manager['lock']:
+                            if proxy in proxy_manager['proxies']:
+                                proxy_manager['proxies'].remove(proxy)
+                    await asyncio.sleep(random.uniform(1, 3))
+                    continue
+                    
+                except aiohttp.ClientError as e:
+                    log(f"Connection error on {ip}: {str(e)}", "error", verbose=True)
+                    if proxy_manager and proxy:
+                        async with proxy_manager['lock']:
+                            if proxy in proxy_manager['proxies']:
+                                proxy_manager['proxies'].remove(proxy)
+                    await asyncio.sleep(random.uniform(0.5, 1.5))
+                    continue
+                    
+                except Exception as e:
+                    log(f"Unexpected error scanning {ip}: {str(e)}", "error", verbose=True)
+                    await asyncio.sleep(random.uniform(0.5, 1.5))
+                    continue
+
+            log(f"Max retries reached for {ip}", "warning", verbose=True)
+            return None
+            
+    except asyncio.CancelledError:
+        return None
+
+async def process_batch(
+    batch: list,
+    cves: list,
+    session: aiohttp.ClientSession,
+    semaphore: asyncio.Semaphore,
+    exit_event: asyncio.Event,
+    proxy_manager: dict
+    ) -> list:
+    vulnerable_hosts = []
+    tasks = []
+
+    for ip in batch:
+        if exit_event.is_set():
+            break
+        task = asyncio.create_task(scan(ip, cves, session, semaphore, exit_event, proxy_manager))
+        tasks.append(task)
+
+    try:
+        for task in asyncio.as_completed(tasks):
+            try:
+                result = await task
+                if result:
+                    vulnerable_hosts.append(result)
+            except Exception as e:
+                if not exit_event.is_set():
+                    log(f"Error in batch processing: {str(e)}", "error")
+    except asyncio.CancelledError:
+        for task in tasks:
+            task.cancel()
+        await asyncio.gather(*tasks, return_exceptions=True)
+        exit_event.set()
+
+    return vulnerable_hosts
+
+async def scan_targets(
+    ip_list,
+    cves: list,
+    output_file: str,
+    timeout: int,
+    max_retries: int,
+    concurrency: int,
+    proxy_threads: int = 100,
+    use_proxy: bool = False,
+    proxy_file: str = None,
+    proxy_check: bool = False,
+    verbose_output: bool = False
+) -> list:
+    global TIMEOUT, MAX_RETRIES, CONCURRENT_REQUESTS
+    TIMEOUT = timeout
+    MAX_RETRIES = max_retries
+    CONCURRENT_REQUESTS = concurrency
+    
+    if verbose_output:
+        for cve in cves:
+            cve_info = await get_cve_info(cve)
+            if cve_info:
+                display_cve_info(cve_info)
+
+    proxy_manager = None
+    if use_proxy or proxy_file:
+        if proxy_check:
+            fresh_proxies = await load_proxies(
+                proxy_file=proxy_file,
+                timeout=timeout,
+                threads=proxy_threads
+            )
+        else:
+            if proxy_file:
+                with open(proxy_file, 'r') as f:
+                    fresh_proxies = [line.strip() for line in f if line.strip()]
+            else:
+                fresh_proxies = await download_proxies()
+        
+        if fresh_proxies:
+            proxy_manager = {
+                'proxies': fresh_proxies,
+                'current_index': 0,
+                'last_refresh': time.time(),
+                'threads': proxy_threads,
+                'failed_proxies': {},
+                'lock': asyncio.Lock()
+            }
+            log(f"Using {len(fresh_proxies)} {'working ' if proxy_check else ''}proxies\n", "success")
+        else:
+            log("No proxies available, aborting scan", "error")
+            return []
+    
+    BATCH_SIZE = 100
+    vulnerable_hosts = []
+    exit_event = asyncio.Event()
+    semaphore = asyncio.Semaphore(CONCURRENT_REQUESTS)
+    json_output = output_file.replace('.txt', '.json') if output_file.endswith('.txt') else output_file + '.json'
+    actually_scanned = 0
+    last_report_time = time.time()
+    report_interval = 30
+
+    ip_list = list(ip_list)
+    total_ips = len(ip_list)
+    log(f"Total IPs to scan: {total_ips}", "info")
+
+    async def progress_reporter():
+        nonlocal actually_scanned, last_report_time
+        while not exit_event.is_set() and actually_scanned < total_ips:
+            await asyncio.sleep(1)
+            current_time = time.time()
+            if current_time - last_report_time >= report_interval:
+                percentage = (actually_scanned / float(total_ips)) * 100 if total_ips > 0 else 0
+                log(f"Progress: {actually_scanned}/{total_ips} IPs scanned ({percentage:.2f}%)", "info")
+                last_report_time = current_time
+
+    try:
+        async with aiohttp.ClientSession() as session:
+            log("Scan started", "info")
+            batch = []
+
+            progress_task = asyncio.create_task(progress_reporter())
+
+            for ip in ip_list:
+                if exit_event.is_set():
+                    break
+
+                batch.append(ip)
+                if len(batch) >= BATCH_SIZE:
+                    batch_results = await process_batch(batch, cves, session, semaphore, exit_event, proxy_manager)
+                    vulnerable_hosts.extend(batch_results)
+                    actually_scanned += len(batch)
+                    batch = []
+
+                    if vulnerable_hosts:
+                        save_immediate_result(batch_results, output_file, json_output, vulnerable_hosts)
+
+            if batch and not exit_event.is_set():
+                batch_results = await process_batch(batch, cves, session, semaphore, exit_event, proxy_manager)
+                vulnerable_hosts.extend(batch_results)
+                actually_scanned += len(batch)
+                if vulnerable_hosts:
+                    save_immediate_result(batch_results, output_file, json_output, vulnerable_hosts)
+
+            progress_task.cancel()
+            try:
+                await progress_task
+            except asyncio.CancelledError:
+                pass
+
+    except KeyboardInterrupt:
+        log("Scan cancelled by user", "warning")
+    except Exception as e:
+        log(f"Unexpected error: {str(e)}", "error")
+    finally:
+        if actually_scanned > 0:
+            percentage = (actually_scanned / total_ips) * 100 if total_ips > 0 else 0
+            log(f"Scan completed: {actually_scanned}/{total_ips} IPs scanned ({percentage:.1f}%)", "info")
+
+    return vulnerable_hosts
