@@ -255,6 +255,7 @@ async def scan_targets(
             log("Scan started", "info")
             processed_ips = 0
             batch = []
+            scanned_ips = 0
 
             for ip in ip_list:
                 if exit_event.is_set():
@@ -265,19 +266,23 @@ async def scan_targets(
                     batch_results = await process_batch(batch, cves, session, semaphore, exit_event, proxy_manager)
                     vulnerable_hosts.extend(batch_results)
                     processed_ips += len(batch)
+                    scanned_ips += len(batch) - batch.count(None)
 
                     if vulnerable_hosts:
                         save_immediate_result(batch_results, output_file, json_output, vulnerable_hosts)
 
-                    log(f"{processed_ips} IPs scanned", "info")
+                    log(f"{scanned_ips} IPs scanned", "info")
                     batch = []
 
-            if batch:
+            if batch and not exit_event.is_set():
                 batch_results = await process_batch(batch, cves, session, semaphore, exit_event, proxy_manager)
                 vulnerable_hosts.extend(batch_results)
                 processed_ips += len(batch)
+                scanned_ips += len(batch) - batch.count(None)
                 if vulnerable_hosts:
                     save_immediate_result(batch_results, output_file, json_output, vulnerable_hosts)
+
+            log(f"{scanned_ips} IPs scanned", "info")
 
     except KeyboardInterrupt:
         log("Scan cancelled by user", "warning")
