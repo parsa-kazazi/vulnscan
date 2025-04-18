@@ -54,7 +54,7 @@ General Options:
   -r, --retries RETRIES
                         Max retries for failed requests (default: 3)
   -w, --workers WORKERS
-                        Number of concurrent workers (default: 10)
+                        Number of concurrent workers (default: 30)
   -v, --verbose         Enable verbose output with detailed information
   -h, --help            Show this help message and exit
 ```

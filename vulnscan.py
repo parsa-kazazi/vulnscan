@@ -75,8 +75,8 @@ def parse_arguments():
                              help='Timeout in seconds for each request (default: 5)')
     general_group.add_argument('-r', '--retries', type=int, default=3, 
                              help='Max retries for failed requests (default: 3)')
-    general_group.add_argument('-w', '--workers', type=int, default=10, 
-                             help='Number of concurrent workers (default: 10)')
+    general_group.add_argument('-w', '--workers', type=int, default=30, 
+                             help='Number of concurrent workers (default: 30)')
     general_group.add_argument('-v', '--verbose', action='store_true', 
                              help='Enable verbose output with detailed information')
     general_group.add_argument('-h', '--help', action='store_true', help='Show this help message and exit')
