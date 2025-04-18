@@ -25,7 +25,8 @@ pip install -r requirements.txt
 ### Available Parameters:
 
 ```
-usage: vulnscan.py [-i IP] [-if IP_FILE] [-c CVE [CVE ...]] [-cf CVE_FILE] [-p] [-pf PROXY_FILE] [-pt PROXY_THREADS] [-pc] [-o OUTPUT] [-t TIMEOUT] [-r RETRIES] [-w WORKERS] [-v] [-h]
+usage: vulnscan.py [-i IP] [-if IP_FILE] [-c CVE [CVE ...]] [-cf CVE_FILE] [-p] [-pf PROXY_FILE] [-pc] [-o OUTPUT] [-w WORKERS]
+                   [-t TIMEOUT] [-r RETRIES] [-v] [-h]
 
 Target Options:
   -i, --ip IP           Single IP or IP range (e.g., 192.168.1.1 or 192.168.1.1-192.168.1.100)
@@ -39,23 +40,20 @@ Vulnerability Options:
                         File containing list of CVE IDs (one per line)
 
 Proxy Options:
-  -p, --use-proxy       Use automatic proxy rotation (download proxies from online sources)
+  -p, --use-proxy       Use automatic proxy rotation
   -pf, --proxy-file PROXY_FILE
-                        File containing list of proxies (one per line)
-                        Formats: http[s]://[user:pass@]host:port or socks[4|5]://[user:pass@]host:port
-  -pt, --proxy-threads PROXY_THREADS
-                        Number of threads for proxy checking (default: 100)
-  -pc, --proxy-check    Check and filter working proxies before use (for both online and file proxies)
+                        File containing list of proxies
+  -pc, --proxy-check    Check and filter working proxies before use
 
 General Options:
   -o, --output OUTPUT   Output file (default: vulnerable.txt)
+  -w, --workers WORKERS
+                        Number of concurrent workers (default: 30)
   -t, --timeout TIMEOUT
                         Timeout in seconds for each request (default: 5)
   -r, --retries RETRIES
                         Max retries for failed requests (default: 3)
-  -w, --workers WORKERS
-                        Number of concurrent workers (default: 30)
-  -v, --verbose         Enable verbose output with detailed information
+  -v, --verbose         Enable verbose output for detailed information
   -h, --help            Show this help message and exit
 ```
 
@@ -87,7 +85,7 @@ python vulnscan.py -i 10.0.0.1-10.0.0.100 -c CVE-2022-1234 -p -pc
 ```
 7. Advanced scan with all options:
 ```
-python vulnscan.py -if targets.txt -cf cves.txt -pf proxies.txt -o output.json -t 20 -r 5 -w 50 -pt 200 -pc -v
+python vulnscan.py -if targets.txt -cf cves.txt -pf proxies.txt -o output.json -t 3 -r 5 -w 300 -pc -v
 ```
 
 ## File Formats
