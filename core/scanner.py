@@ -202,7 +202,7 @@ async def scan_targets(
     proxy_file: str = None,
     proxy_check: bool = False,
     verbose_output: bool = False
-) -> list:
+    ) -> list:
     global TIMEOUT, MAX_RETRIES, CONCURRENT_REQUESTS
     TIMEOUT = timeout
     MAX_RETRIES = max_retries
