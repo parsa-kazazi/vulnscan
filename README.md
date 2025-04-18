@@ -117,8 +117,8 @@ Results are saved in two formats:
 
 1. Simple text file (`vulnerable.txt`):
 ```
-192.168.1.15 - CVE-2022-27502
-10.0.0.23 - CVE-2021-41380, CVE-2020-3452
+192.168.1.15 is vulnerable to CVE-2022-27502
+10.0.0.23 is vulnerable to CVE-2021-41380, CVE-2020-3452
 ```
 
 2. Complete JSON file (`vulnerable.json`):
