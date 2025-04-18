@@ -50,35 +50,36 @@ def parse_arguments():
     )
     
     target_group = parser.add_argument_group('Target Options')
-    target_group.add_argument('-i', '--ip', type=str, help='Single IP or IP range (e.g., 192.168.1.1 or 192.168.1.1-192.168.1.100)')
-    target_group.add_argument('-if', '--ip-file', type=str, help='File containing list of IPs or IP ranges (one per line)')
+    target_group.add_argument('-i', '--ip', type=str,
+                              help='Single IP or IP range (e.g., 192.168.1.1 or 192.168.1.1-192.168.1.100)')
+    target_group.add_argument('-if', '--ip-file', type=str,
+                              help='File containing list of IPs or IP ranges (one per line)')
     
     vuln_group = parser.add_argument_group('Vulnerability Options')
-    vuln_group.add_argument('-c', '--cve', nargs='+', help='One or more CVE IDs (e.g., CVE-2022-27502)')
-    vuln_group.add_argument('-cf', '--cve-file', type=str, help='File containing list of CVE IDs (one per line)')
+    vuln_group.add_argument('-c', '--cve', nargs='+',
+                            help='One or more CVE IDs (e.g., CVE-2022-27502)')
+    vuln_group.add_argument('-cf', '--cve-file', type=str,
+                            help='File containing list of CVE IDs (one per line)')
 
     proxy_group = parser.add_argument_group('Proxy Options')
     proxy_group.add_argument('-p', '--use-proxy', action='store_true', 
-                           help='Use automatic proxy rotation (download proxies from online sources)')
+                             help='Use automatic proxy rotation')
     proxy_group.add_argument('-pf', '--proxy-file', type=str, 
-                           help='File containing list of proxies (one per line)\n'
-                                'Formats: http[s]://[user:pass@]host:port or socks[4|5]://[user:pass@]host:port')
-    proxy_group.add_argument('-pt', '--proxy-threads', type=int, default=100,
-                           help='Number of threads for proxy checking (default: 100)')
+                             help='File containing list of proxies')
     proxy_group.add_argument('-pc', '--proxy-check', action='store_true',
-                       help='Check and filter working proxies before use (for both online and file proxies)')
+                             help='Check and filter working proxies before use')
 
     general_group = parser.add_argument_group('General Options')
     general_group.add_argument('-o', '--output', type=str, default="vulnerable.txt", 
                              help=f'Output file (default: vulnerable.txt)')
+    general_group.add_argument('-w', '--workers', type=int, default=30,
+                             help='Number of concurrent workers (default: 30)')
     general_group.add_argument('-t', '--timeout', type=int, default=5, 
                              help='Timeout in seconds for each request (default: 5)')
     general_group.add_argument('-r', '--retries', type=int, default=3, 
                              help='Max retries for failed requests (default: 3)')
-    general_group.add_argument('-w', '--workers', type=int, default=30, 
-                             help='Number of concurrent workers (default: 30)')
     general_group.add_argument('-v', '--verbose', action='store_true', 
-                             help='Enable verbose output with detailed information')
+                             help='Enable verbose output for detailed information')
     general_group.add_argument('-h', '--help', action='store_true', help='Show this help message and exit')
     
     args, unknown = parser.parse_known_args()
@@ -141,7 +142,7 @@ def main():
     log(f"Workers: {args.workers}", "info")
     log(f"Proxy: {'Enabled (file)' if args.proxy_file else 'Enabled (auto)' if args.use_proxy else 'Disabled'}", "info")
     if args.proxy_file or args.use_proxy:
-        log(f"Proxy threads: {args.proxy_threads}", "info")
+        log(f"Proxy checking: {'Enabled' if args.proxy_check else 'Disabled'}", "info")
         if args.proxy_file:
             log(f"Proxy file: {args.proxy_file}", "info")
     log(f"Verbose: {'Enabled' if args.verbose else 'Disabled'}")
@@ -155,11 +156,10 @@ def main():
                 output_file=args.output,
                 use_proxy=args.use_proxy,
                 proxy_file=args.proxy_file,
+                proxy_check=args.proxy_check,
+                concurrency=args.workers,
                 timeout=args.timeout,
                 max_retries=args.retries,
-                concurrency=args.workers,
-                proxy_threads=args.proxy_threads,
-                proxy_check=args.proxy_check,
                 verbose_output=args.verbose
             )
         )

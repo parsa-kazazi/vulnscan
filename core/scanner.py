@@ -97,7 +97,7 @@ async def scan(ip: str, cves: list, session: aiohttp.ClientSession,
                                 log("Proxy list empty or expired, refreshing...", "info")
                                 proxy_manager['proxies'] = await load_proxies(
                                     timeout=TIMEOUT,
-                                    threads=proxy_manager.get('threads', 100)
+                                    workers=proxy_manager.get('workers', 100)
                                 )
                                 proxy_manager['last_refresh'] = time.time()
                                 proxy_manager['current_index'] = 0
@@ -163,7 +163,7 @@ async def process_batch(
     semaphore: asyncio.Semaphore,
     exit_event: asyncio.Event,
     proxy_manager: dict
-    ) -> list:
+) -> list:
     vulnerable_hosts = []
     tasks = []
 
@@ -190,23 +190,15 @@ async def process_batch(
 
     return vulnerable_hosts
 
-async def scan_targets(
-    ip_list,
-    cves: list,
-    output_file: str,
-    timeout: int,
-    max_retries: int,
-    concurrency: int,
-    proxy_threads: int = 100,
-    use_proxy: bool = False,
-    proxy_file: str = None,
-    proxy_check: bool = False,
-    verbose_output: bool = False
-    ) -> list:
-    global TIMEOUT, MAX_RETRIES, CONCURRENT_REQUESTS
+async def scan_targets(ip_list, cves: list,
+                       output_file: str, timeout: int,
+                       max_retries: int, concurrency: int,
+                       use_proxy: bool = False, proxy_file: str = None,
+                       proxy_check: bool = False,
+                       verbose_output: bool = False) -> list:
+    global TIMEOUT, MAX_RETRIES
     TIMEOUT = timeout
     MAX_RETRIES = max_retries
-    CONCURRENT_REQUESTS = concurrency
     
     if verbose_output:
         for cve in cves:
@@ -220,7 +212,7 @@ async def scan_targets(
             fresh_proxies = await load_proxies(
                 proxy_file=proxy_file,
                 timeout=timeout,
-                threads=proxy_threads
+                workers=concurrency
             )
         else:
             if proxy_file:
@@ -234,7 +226,7 @@ async def scan_targets(
                 'proxies': fresh_proxies,
                 'current_index': 0,
                 'last_refresh': time.time(),
-                'threads': proxy_threads,
+                'workers': concurrency,
                 'failed_proxies': {},
                 'lock': asyncio.Lock()
             }
@@ -246,7 +238,7 @@ async def scan_targets(
     BATCH_SIZE = 100
     vulnerable_hosts = []
     exit_event = asyncio.Event()
-    semaphore = asyncio.Semaphore(CONCURRENT_REQUESTS)
+    semaphore = asyncio.Semaphore(concurrency)
     json_output = output_file.replace('.txt', '.json') if output_file.endswith('.txt') else output_file + '.json'
     actually_scanned = 0
     last_report_time = time.time()

@@ -76,9 +76,9 @@ async def check_proxy(proxy, timeout=5):
         log(f"Error checking proxy {proxy}: {str(e)}", "warning", verbose=True)
         return False
 
-async def check_proxies(proxies: list, timeout: int = 5, threads: int = 100) -> list:
+async def check_proxies(proxies: list, timeout: int = 5, workers: int = 100) -> list:
     working_proxies = []
-    semaphore = asyncio.Semaphore(threads)
+    semaphore = asyncio.Semaphore(workers)
     
     async def _check_and_add(proxy):
         async with semaphore:
@@ -97,7 +97,7 @@ async def check_proxies(proxies: list, timeout: int = 5, threads: int = 100) -> 
     working_proxies.sort(key=lambda x: x[1])
     return [proxy for proxy, speed in working_proxies]
 
-async def load_proxies(proxy_file: str = None, timeout: int = 5, threads: int = 100) -> list:
+async def load_proxies(proxy_file: str = None, timeout: int = 5, workers: int = 100) -> list:
     if proxy_file:
         log(f"Loading proxies from file: {proxy_file}", "info")
         try:
@@ -108,7 +108,7 @@ async def load_proxies(proxy_file: str = None, timeout: int = 5, threads: int = 
                 log("No valid proxies found in file", "error")
                 return []
                 
-            return await check_proxies(proxies, timeout, threads)
+            return await check_proxies(proxies, timeout, workers)
         except Exception as e:
             log(f"Failed to load proxies from file: {str(e)}", "error")
             return []
@@ -118,4 +118,4 @@ async def load_proxies(proxy_file: str = None, timeout: int = 5, threads: int = 
         log("No proxies downloaded", "error")
         return []
     
-    return await check_proxies(raw_proxies, timeout, threads)
+    return await check_proxies(raw_proxies, timeout, workers)
