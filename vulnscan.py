@@ -84,7 +84,7 @@ def parse_arguments():
     args, unknown = parser.parse_known_args()
     
     if unknown:
-        log(f"Error: Unknown arguments: {' '.join(unknown)}\n", "error")
+        log(f"Unknown arguments: {' '.join(unknown)}\n", "error")
         usage(parser)
         sys.exit(1)
     
@@ -93,12 +93,12 @@ def parse_arguments():
         sys.exit(0)
     
     if not args.ip and not args.ip_file:
-        log("Error: You must specify either an IP/range (-i) or a file with IPs (-if)\n", "error")
+        log("You must specify either an IP/range (-i) or a file with IPs (-if)\n", "error")
         usage(parser)
         sys.exit(1)
         
     if not args.cve and not args.cve_file:
-        log("Error: You must specify either CVE IDs (-c) or a file with CVEs (-cf)\n", "error")
+        log("You must specify either CVE IDs (-c) or a file with CVEs (-cf)\n", "error")
         usage(parser)
         sys.exit(1)
     
@@ -115,7 +115,7 @@ def main():
         ip_list = get_ip_list(args.ip)
     
     if not ip_list:
-        log("Error: No valid IP addresses found to scan", "error")
+        log("No valid IP addresses found to scan", "error")
         sys.exit(1)
         
     if args.cve_file:
@@ -126,11 +126,11 @@ def main():
     cves = clean_cve_list(cves)
     
     if not cves:
-        log("Error: No valid CVE IDs provided", "error")
+        log("No valid CVE IDs provided", "error")
         sys.exit(1)
     
     if args.proxy_file and args.use_proxy:
-        log("Warning: Both proxy options specified (-p and -pf), using proxy file (-pf) takes precedence", "warning")
+        log("Both proxy options specified (-p and -pf), using proxy file (-pf) takes precedence", "warning")
         args.use_proxy = False
     
     log(f"Target: {args.ip_file if args.ip_file else args.ip}", "info")
@@ -175,7 +175,7 @@ def main():
         log("Scan cancelled by user", "warning")
         sys.exit(0)
     except Exception as e:
-        log(f"Unexpected error: {str(e)}", "error")
+        log(f"Error: {str(e)}", "error")
 
 if __name__ == "__main__":
     main()

@@ -73,7 +73,7 @@ async def check_proxy(proxy, timeout=5):
                 return False
                 
     except Exception as e:
-        log(f"Unexpected error checking proxy {proxy}: {str(e)}", "warning", verbose=True)
+        log(f"Error checking proxy {proxy}: {str(e)}", "warning", verbose=True)
         return False
 
 async def check_proxies(proxies: list, timeout: int = 5, threads: int = 100) -> list:

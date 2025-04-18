@@ -146,7 +146,7 @@ async def scan(ip: str, cves: list, session: aiohttp.ClientSession,
                     continue
                     
                 except Exception as e:
-                    log(f"Unexpected error scanning {ip}: {str(e)}", "error", verbose=True)
+                    log(f"Error scanning {ip}: {str(e)}", "error", verbose=True)
                     await asyncio.sleep(random.uniform(0.5, 1.5))
                     continue
 
@@ -303,7 +303,7 @@ async def scan_targets(
     except KeyboardInterrupt:
         log("Scan cancelled by user", "warning")
     except Exception as e:
-        log(f"Unexpected error: {str(e)}", "error")
+        log(f"Error: {str(e)}", "error")
     finally:
         if actually_scanned > 0:
             percentage = (actually_scanned / total_ips) * 100 if total_ips > 0 else 0
