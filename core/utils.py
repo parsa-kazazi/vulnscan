@@ -11,17 +11,17 @@ def set_verbose(verbose):
     global VERBOSE
     VERBOSE = verbose
 
-def log(message, level="info", verbose=False):
+def log(message, level="i", verbose=False):
     if verbose and not VERBOSE:
         return
         
     levels = {
-        "info": f"{Fore.LIGHTBLUE_EX}[*]{Style.RESET_ALL}",
-        "success": f"{Fore.LIGHTGREEN_EX}[+]{Style.RESET_ALL}",
-        "warning": f"{Fore.LIGHTYELLOW_EX}[!]{Style.RESET_ALL}",
-        "error": f"{Fore.LIGHTRED_EX}[-]{Style.RESET_ALL}",
+        "i": f"{Fore.LIGHTBLUE_EX}[*]{Style.RESET_ALL}", # info
+        "s": f"{Fore.LIGHTGREEN_EX}[+]{Style.RESET_ALL}", # success
+        "w": f"{Fore.LIGHTYELLOW_EX}[!]{Style.RESET_ALL}", # warning
+        "e": f"{Fore.LIGHTRED_EX}[-]{Style.RESET_ALL}", # error
     }
-    print(f"{levels.get(level, levels['info'])} {message}")
+    print(f"{levels.get(level, levels['i'])} {message}")
 
 def validate_ip(ip: str) -> bool:
     try:
@@ -51,7 +51,7 @@ def clean_cve_list(cves: list) -> list:
     
     for cve in cves:
         if not validate_cve(cve):
-            log(f"Ignoring invalid CVE format: {cve}", "warning")
+            log(f"Ignoring invalid CVE format: {cve}", "w")
             continue
         
         cve_upper = cve.upper()
@@ -137,16 +137,16 @@ async def get_cve_info(cve_id: str) -> dict:
         if response.status == 200:
             return await response.json()
         elif response.status == 404:
-            log(f"No information available for {cve_id}", "warning")
+            log(f"No information available for {cve_id}", "w")
         else:
-            log(f"Failed to get CVE info (Status: {response.status})", "warning")
+            log(f"Failed to get CVE info (Status: {response.status})", "w")
     except Exception as e:
         await session.close()
-        log(f"Error fetching CVE info: {str(e)}", "error")
+        log(f"Error fetching CVE info: {str(e)}", "e")
     return None
 
 def display_cve_info(cve_info: dict):
-    log(f"CVE Information for {cve_info.get('cve_id', 'N/A')}:", "info")
+    log(f"CVE Information for {cve_info.get('cve_id', 'N/A')}:", "i")
     print(f" - Summary: {cve_info.get('summary', 'N/A')}")
     print(f" - CVSS Score: {cve_info.get('cvss_v3', cve_info.get('cvss', 'N/A'))}")
     print(f" - Published: {cve_info.get('published_time', 'N/A')}")
@@ -173,10 +173,10 @@ def save_results(vulnerable_hosts: list, output_file: str):
         with open(json_output, 'w') as f:
             json.dump(vulnerable_hosts, f, indent=2)
         
-        log(f"Found {len(vulnerable_hosts)} vulnerable IPs", "success")
-        log(f"Results saved to {output_file} and {json_output}", "info")
+        log(f"Found {len(vulnerable_hosts)} vulnerable IPs", "s")
+        log(f"Results saved to {output_file} and {json_output}", "i")
     except Exception as e:
-        log(f"Failed to save final results: {str(e)}", "error")
+        log(f"Failed to save final results: {str(e)}", "e")
 
 def save_immediate_result(result: dict, txt_file: str, json_file: str, vulnerable_hosts: list):
     try:
@@ -191,4 +191,4 @@ def save_immediate_result(result: dict, txt_file: str, json_file: str, vulnerabl
             json.dump(vulnerable_hosts, f, indent=2)
             
     except Exception as e:
-        log(f"Failed to save immediate result: {str(e)}", "error")
+        log(f"Failed to save immediate result: {str(e)}", "e")
