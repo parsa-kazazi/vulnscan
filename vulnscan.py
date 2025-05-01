@@ -85,7 +85,7 @@ def parse_arguments():
     args, unknown = parser.parse_known_args()
     
     if unknown:
-        log(f"Unknown arguments: {' '.join(unknown)}\n", "error")
+        log(f"Unknown arguments: {' '.join(unknown)}\n", "e")
         usage(parser)
         sys.exit(1)
     
@@ -94,12 +94,12 @@ def parse_arguments():
         sys.exit(0)
     
     if not args.ip and not args.ip_file:
-        log("You must specify either an IP/range (-i) or a file with IPs (-if)\n", "error")
+        log("You must specify either an IP/range (-i) or a file with IPs (-if)\n", "e")
         usage(parser)
         sys.exit(1)
         
     if not args.cve and not args.cve_file:
-        log("You must specify either CVE IDs (-c) or a file with CVEs (-cf)\n", "error")
+        log("You must specify either CVE IDs (-c) or a file with CVEs (-cf)\n", "e")
         usage(parser)
         sys.exit(1)
     
@@ -116,7 +116,7 @@ def main():
         ip_list = get_ip_list(args.ip)
     
     if not ip_list:
-        log("No valid IP addresses found to scan", "error")
+        log("No valid IP addresses found to scan", "e")
         sys.exit(1)
         
     if args.cve_file:
@@ -127,24 +127,24 @@ def main():
     cves = clean_cve_list(cves)
     
     if not cves:
-        log("No valid CVE IDs provided", "error")
+        log("No valid CVE IDs provided", "e")
         sys.exit(1)
     
     if args.proxy_file and args.use_proxy:
-        log("Both proxy options specified (-p and -pf), using proxy file (-pf) takes precedence", "warning")
+        log("Both proxy options specified (-p and -pf), using proxy file (-pf) takes precedence", "w")
         args.use_proxy = False
     
-    log(f"Target: {args.ip_file if args.ip_file else args.ip}", "info")
-    log(f"CVEs: {args.cve_file if args.cve_file else ', '.join(args.cve)}", "info")
-    log(f"Output file: {args.output}", "info")
-    log(f"Timeout: {args.timeout}s", "info")
-    log(f"Retries: {args.retries}", "info")
-    log(f"Workers: {args.workers}", "info")
-    log(f"Proxy: {'Enabled (file)' if args.proxy_file else 'Enabled (auto)' if args.use_proxy else 'Disabled'}", "info")
+    log(f"Target: {args.ip_file if args.ip_file else args.ip}", "i")
+    log(f"CVEs: {args.cve_file if args.cve_file else ', '.join(args.cve)}", "i")
+    log(f"Output file: {args.output}", "i")
+    log(f"Timeout: {args.timeout}s", "i")
+    log(f"Retries: {args.retries}", "i")
+    log(f"Workers: {args.workers}", "i")
+    log(f"Proxy: {'Enabled (file)' if args.proxy_file else 'Enabled (auto)' if args.use_proxy else 'Disabled'}", "i")
     if args.proxy_file or args.use_proxy:
-        log(f"Proxy checking: {'Enabled' if args.proxy_check else 'Disabled'}", "info")
+        log(f"Proxy checking: {'Enabled' if args.proxy_check else 'Disabled'}", "i")
         if args.proxy_file:
-            log(f"Proxy file: {args.proxy_file}", "info")
+            log(f"Proxy file: {args.proxy_file}", "i")
     log(f"Verbose: {'Enabled' if args.verbose else 'Disabled'}")
     print()
     
@@ -164,18 +164,18 @@ def main():
             )
         )
         
-        log("Scan results:", "info")
+        log("Scan results:", "i")
         if vulnerable_hosts:
             save_results(vulnerable_hosts, args.output)
         else:
-            log("No vulnerable IPs found", "info")
+            log("No vulnerable IPs found", "i")
             
     except KeyboardInterrupt:
         print()
-        log("Scan cancelled by user", "warning")
+        log("Scan cancelled by user", "w")
         sys.exit(0)
     except Exception as e:
-        log(f"Error: {str(e)}", "error")
+        log(f"Error: {str(e)}", "e")
 
 if __name__ == "__main__":
     main()
