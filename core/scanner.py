@@ -16,7 +16,7 @@ async def handle_response(response, ip: str, cves: list, proxy_manager: dict) ->
         
         if 'text/html' in content_type:
             if response.status == 403:
-                log(f"Access forbidden on {ip}", "warning", verbose=True)
+                log(f"Access forbidden on {ip}", "w", True)
                 return None, False
             return None, False
         
@@ -24,12 +24,12 @@ async def handle_response(response, ip: str, cves: list, proxy_manager: dict) ->
             response_data = await response.json() if response.status != 204 else {}
         except ValueError:
             if response.status == 200:
-                log(f"Invalid JSON from {ip}", "warning", verbose=True)
+                log(f"Invalid JSON from {ip}", "w", True)
             return None, False
         
         if response.status == 200:
             if not response_data:
-                log(f"Empty response from {ip}", "warning", verbose=True)
+                log(f"Empty response from {ip}", "w", True)
                 return None, False
                 
             if "vulns" in response_data:
@@ -45,39 +45,39 @@ async def handle_response(response, ip: str, cves: list, proxy_manager: dict) ->
                         "all_vulns": response_data.get("vulns", [])
                     }
                     if len(found_vulns) == 1:
-                        log(f"{ip} is vulnerable to {found_vulns[0]}", "success")
+                        log(f"{ip} is vulnerable to {found_vulns[0]}", "s")
                     else:
-                        log(f"{ip} is vulnerable to {', '.join(found_vulns)}", "success")
+                        log(f"{ip} is vulnerable to {', '.join(found_vulns)}", "s")
                     return result, False
             return None, False
         
         elif response.status == 404:
-            log(f"{ip} not found in shodan", "warning", verbose=True)
+            log(f"{ip} not found in shodan", "w", True)
             return None, False
         
         elif response.status == 429:
             if not proxy_manager:
                 if not hasattr(handle_response, 'rate_limit_reported'):
-                    log("API rate limit reached. Stopping scan.", "error")
-                    log("Use proxies or try again later.", "error")
+                    log("API rate limit reached. Stopping scan.", "e")
+                    log("Use proxies or try again later.", "e")
                     handle_response.rate_limit_reported = True
                 raise asyncio.CancelledError("Rate limit reached")
             return None, True
         
         elif response.status == 403:
-            log(f"Access forbidden on {ip}", "warning", verbose=True)
+            log(f"Access forbidden on {ip}", "w", True)
             return None, False
         
         elif response.status == 401:
-            log(f"Unauthorized access on {ip}", "error", verbose=True)
+            log(f"Unauthorized access on {ip}", "e", True)
             return None, False
         
         else:
-            log(f"Failed to scan {ip} (Status: {response.status})", "error", verbose=True)
+            log(f"Failed to scan {ip} (Status: {response.status})", "e", True)
             return None, False
             
     except Exception as e:
-        log(f"Error processing {ip}: {str(e)}", "error", verbose=True)
+        log(f"Error processing {ip}: {str(e)}", "e", True)
         return None, False
 
 async def scan(ip: str, cves: list, session: aiohttp.ClientSession, 
@@ -94,7 +94,7 @@ async def scan(ip: str, cves: list, session: aiohttp.ClientSession,
                     if proxy_manager:
                         async with proxy_manager['lock']:
                             if not proxy_manager['proxies'] or time.time() - proxy_manager['last_refresh'] > 3600:
-                                log("Proxy list empty or expired, refreshing...", "info")
+                                log("Proxy list empty or expired, refreshing...", "i")
                                 proxy_manager['proxies'] = await load_proxies(
                                     timeout=TIMEOUT,
                                     workers=proxy_manager.get('workers', 100)
@@ -106,7 +106,7 @@ async def scan(ip: str, cves: list, session: aiohttp.ClientSession,
                                 proxy = proxy_manager['proxies'][proxy_manager['current_index'] % len(proxy_manager['proxies'])]
                                 proxy_manager['current_index'] += 1
                     
-                    log(f"Scanning {ip} with {'proxy ' + proxy if proxy else 'direct connection'}", "info", verbose=True)
+                    log(f"Scanning {ip} with {'proxy ' + proxy if proxy else 'direct connection'}", "i", True)
                     
                     async with session.get(f"https://internetdb.shodan.io/{ip}", 
                                         timeout=TIMEOUT, 
@@ -115,7 +115,7 @@ async def scan(ip: str, cves: list, session: aiohttp.ClientSession,
                         result, rate_limit = await handle_response(response, ip, cves, proxy_manager)
                         
                         if rate_limit and proxy_manager and proxy:
-                            log(f"Proxy rate limited: {proxy}", "warning", verbose=True)
+                            log(f"Proxy rate limited: {proxy}", "w", True)
                             async with proxy_manager['lock']:
                                 if proxy in proxy_manager['proxies']:
                                     proxy_manager['proxies'].remove(proxy)
@@ -128,7 +128,7 @@ async def scan(ip: str, cves: list, session: aiohttp.ClientSession,
                     exit_event.set()
                     return None
                 except asyncio.TimeoutError:
-                    log(f"Timeout on {ip} (attempt {retry + 1}/{MAX_RETRIES})", "warning", verbose=True)
+                    log(f"Timeout on {ip} (attempt {retry + 1}/{MAX_RETRIES})", "w", True)
                     if proxy_manager and proxy:
                         async with proxy_manager['lock']:
                             if proxy in proxy_manager['proxies']:
@@ -137,7 +137,7 @@ async def scan(ip: str, cves: list, session: aiohttp.ClientSession,
                     continue
                     
                 except aiohttp.ClientError as e:
-                    log(f"Connection error on {ip}: {str(e)}", "error", verbose=True)
+                    log(f"Connection error on {ip}: {str(e)}", "e", True)
                     if proxy_manager and proxy:
                         async with proxy_manager['lock']:
                             if proxy in proxy_manager['proxies']:
@@ -146,11 +146,11 @@ async def scan(ip: str, cves: list, session: aiohttp.ClientSession,
                     continue
                     
                 except Exception as e:
-                    log(f"Error scanning {ip}: {str(e)}", "error", verbose=True)
+                    log(f"Error scanning {ip}: {str(e)}", "e", True)
                     await asyncio.sleep(random.uniform(0.5, 1.5))
                     continue
 
-            log(f"Max retries reached for {ip}", "warning", verbose=True)
+            log(f"Max retries reached for {ip}", "w", True)
             return None
             
     except asyncio.CancelledError:
@@ -181,7 +181,7 @@ async def process_batch(
                     vulnerable_hosts.append(result)
             except Exception as e:
                 if not exit_event.is_set():
-                    log(f"Error in batch processing: {str(e)}", "error")
+                    log(f"Error in batch processing: {str(e)}", "e")
     except asyncio.CancelledError:
         for task in tasks:
             task.cancel()
@@ -230,9 +230,9 @@ async def scan_targets(ip_list, cves: list,
                 'failed_proxies': {},
                 'lock': asyncio.Lock()
             }
-            log(f"Using {len(fresh_proxies)} {'working ' if proxy_check else ''}proxies\n", "success")
+            log(f"Using {len(fresh_proxies)} {'working ' if proxy_check else ''}proxies\n", "s")
         else:
-            log("No proxies available, aborting scan", "error")
+            log("No proxies available, aborting scan", "e")
             return []
     
     BATCH_SIZE = 100
@@ -246,7 +246,7 @@ async def scan_targets(ip_list, cves: list,
 
     ip_list = list(ip_list)
     total_ips = len(ip_list)
-    log(f"Total IPs to scan: {total_ips}", "info")
+    log(f"Total IPs to scan: {total_ips}", "i")
 
     async def progress_reporter():
         nonlocal actually_scanned, last_report_time
@@ -255,12 +255,12 @@ async def scan_targets(ip_list, cves: list,
             current_time = time.time()
             if current_time - last_report_time >= report_interval:
                 percentage = (actually_scanned / float(total_ips)) * 100 if total_ips > 0 else 0
-                log(f"Progress: {actually_scanned}/{total_ips} IPs scanned ({percentage:.2f}%)", "info")
+                log(f"Progress: {actually_scanned}/{total_ips} IPs scanned ({percentage:.2f}%)", "i")
                 last_report_time = current_time
 
     try:
         async with aiohttp.ClientSession() as session:
-            log("Scan started", "info")
+            log("Scan started", "i")
             batch = []
 
             progress_task = asyncio.create_task(progress_reporter())
@@ -293,12 +293,12 @@ async def scan_targets(ip_list, cves: list,
                 pass
 
     except KeyboardInterrupt:
-        log("Scan cancelled by user", "warning")
+        log("Scan cancelled by user", "w")
     except Exception as e:
-        log(f"Error: {str(e)}", "error")
+        log(f"Error: {str(e)}", "e")
     finally:
         if actually_scanned > 0:
             percentage = (actually_scanned / total_ips) * 100 if total_ips > 0 else 0
-            log(f"Scan completed: {actually_scanned}/{total_ips} IPs scanned ({percentage:.1f}%)", "info")
+            log(f"Scan completed: {actually_scanned}/{total_ips} IPs scanned ({percentage:.1f}%)", "i")
 
     return vulnerable_hosts
