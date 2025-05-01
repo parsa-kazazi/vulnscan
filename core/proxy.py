@@ -16,12 +16,12 @@ async def download_proxies(validate=False, timeout=5):
     
     proxies = []
 
-    log("Downloading fresh proxies from online sources", "info")
+    log("Downloading fresh proxies from online sources", "i")
 
     for url in urls:
         try:
             async with aiohttp.ClientSession() as session:
-                log(f"Downloading proxies from: {url}", "info", verbose=True)
+                log(f"Downloading proxies from: {url}", "i", True)
                 async with session.get(url) as response:
                     if response.status == 200:
                         text = await response.text()
@@ -66,14 +66,14 @@ async def check_proxy(proxy, timeout=5):
                         return True, speed
                     return False
             except asyncio.TimeoutError:
-                log(f"Proxy timeout: {proxy}", "warning", verbose=True)
+                log(f"Proxy timeout: {proxy}", "w", True)
                 return False
             except Exception as e:
-                log(f"Proxy error: {proxy} - {str(e)}", "warning", verbose=True)
+                log(f"Proxy error: {proxy} - {str(e)}", "w", True)
                 return False
                 
     except Exception as e:
-        log(f"Error checking proxy {proxy}: {str(e)}", "warning", verbose=True)
+        log(f"Error checking proxy {proxy}: {str(e)}", "w", True)
         return False
 
 async def check_proxies(proxies: list, timeout: int = 5, workers: int = 100) -> list:
@@ -87,9 +87,9 @@ async def check_proxies(proxies: list, timeout: int = 5, workers: int = 100) -> 
                 is_working, speed = result
                 if is_working:
                     working_proxies.append((proxy, speed))
-                    log(f"Working proxy: {proxy} (Response: {speed:.2f}s)", "success")
+                    log(f"Working proxy: {proxy} (Response: {speed:.2f}s)", "s")
             else:
-                log(f"Failed proxy: {proxy}", "warning", verbose=True)
+                log(f"Failed proxy: {proxy}", "w", True)
     
     tasks = [_check_and_add(proxy) for proxy in proxies]
     await asyncio.gather(*tasks)
@@ -99,23 +99,23 @@ async def check_proxies(proxies: list, timeout: int = 5, workers: int = 100) -> 
 
 async def load_proxies(proxy_file: str = None, timeout: int = 5, workers: int = 100) -> list:
     if proxy_file:
-        log(f"Loading proxies from file: {proxy_file}", "info")
+        log(f"Loading proxies from file: {proxy_file}", "i")
         try:
             with open(proxy_file, 'r') as f:
                 proxies = [line.strip() for line in f if line.strip()]
             proxies = [p for p in proxies if validate_proxy(p)]
             if not proxies:
-                log("No valid proxies found in file", "error")
+                log("No valid proxies found in file", "e")
                 return []
                 
             return await check_proxies(proxies, timeout, workers)
         except Exception as e:
-            log(f"Failed to load proxies from file: {str(e)}", "error")
+            log(f"Failed to load proxies from file: {str(e)}", "e")
             return []
     
     raw_proxies = await download_proxies()
     if not raw_proxies:
-        log("No proxies downloaded", "error")
+        log("No proxies downloaded", "e")
         return []
     
     return await check_proxies(raw_proxies, timeout, workers)
